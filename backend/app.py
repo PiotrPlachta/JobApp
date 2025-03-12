@@ -26,6 +26,9 @@ def init_db():
         company TEXT,
         role TEXT,
         salary TEXT,
+        salary_amount REAL,
+        salary_currency TEXT DEFAULT 'PLN',
+        salary_type TEXT DEFAULT 'yearly',
         url TEXT,
         date_posted TEXT,
         date_applied TEXT,
@@ -64,6 +67,9 @@ def add_application():
     
     # Set default values for optional fields
     data.setdefault('salary', '')
+    data.setdefault('salary_amount', 0)
+    data.setdefault('salary_currency', 'PLN')
+    data.setdefault('salary_type', 'yearly')
     data.setdefault('date_posted', '')
     data.setdefault('date_applied', datetime.now().strftime('%Y-%m-%d'))
     data.setdefault('cv_path', '')
@@ -74,9 +80,9 @@ def add_application():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
-    INSERT INTO applications (company, role, salary, url, date_posted, date_applied, cv_path, status, notes, last_updated)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (data['company'], data['role'], data['salary'], data['url'], 
+    INSERT INTO applications (company, role, salary, salary_amount, salary_currency, salary_type, url, date_posted, date_applied, cv_path, status, notes, last_updated)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (data['company'], data['role'], data['salary'], data['salary_amount'], data['salary_currency'], data['salary_type'], data['url'], 
           data['date_posted'], data['date_applied'], data['cv_path'], 
           data['status'], data['notes'], data['last_updated']))
     conn.commit()
@@ -110,7 +116,7 @@ def update_application(app_id):
         return jsonify({'error': 'Application not found'}), 404
     
     # Update fields
-    fields = ['company', 'role', 'salary', 'url', 'date_posted', 'date_applied', 'cv_path', 'status', 'notes']
+    fields = ['company', 'role', 'salary', 'salary_amount', 'salary_currency', 'salary_type', 'url', 'date_posted', 'date_applied', 'cv_path', 'status', 'notes']
     updates = {field: data.get(field, dict(application)[field]) for field in fields}
     
     # Always update the last_updated timestamp
@@ -119,9 +125,9 @@ def update_application(app_id):
     cursor = conn.cursor()
     cursor.execute('''
     UPDATE applications
-    SET company = ?, role = ?, salary = ?, url = ?, date_posted = ?, date_applied = ?, cv_path = ?, status = ?, notes = ?, last_updated = ?
+    SET company = ?, role = ?, salary = ?, salary_amount = ?, salary_currency = ?, salary_type = ?, url = ?, date_posted = ?, date_applied = ?, cv_path = ?, status = ?, notes = ?, last_updated = ?
     WHERE id = ?
-    ''', (updates['company'], updates['role'], updates['salary'], updates['url'],
+    ''', (updates['company'], updates['role'], updates['salary'], updates['salary_amount'], updates['salary_currency'], updates['salary_type'], updates['url'],
           updates['date_posted'], updates['date_applied'], updates['cv_path'], 
           updates['status'], updates['notes'], updates['last_updated'], app_id))
     conn.commit()
@@ -160,6 +166,27 @@ def get_application_statuses():
     ]
     return jsonify(statuses)
 
+@app.route('/api/salary-currencies', methods=['GET'])
+def get_salary_currencies():
+    # Return a list of supported currencies
+    currencies = [
+        'PLN',
+        'EUR',
+        'USD',
+        'GBP'
+    ]
+    return jsonify(currencies)
+
+@app.route('/api/salary-types', methods=['GET'])
+def get_salary_types():
+    # Return a list of salary types
+    types = [
+        'hourly',
+        'monthly',
+        'yearly'
+    ]
+    return jsonify(types)
+
 @app.route('/api/analyze-url', methods=['POST'])
 def analyze_url():
     data = request.json
@@ -173,11 +200,73 @@ def analyze_url():
     mock_analysis = {
         'company': 'Example Company',
         'role': 'Software Developer',
-        'salary': '$100,000 - $120,000',
+        'salary': '100,000 PLN per year',
+        'salary_amount': 100000,
+        'salary_currency': 'PLN',
+        'salary_type': 'yearly',
         'date_posted': datetime.now().strftime('%Y-%m-%d')
     }
     
     return jsonify(mock_analysis)
+
+@app.route('/api/calculate-yearly-salary', methods=['POST'])
+def calculate_yearly_salary():
+    data = request.json
+    
+    # Validate required fields
+    required_fields = ['amount', 'currency', 'type']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    amount = float(data['amount'])
+    currency = data['currency']
+    salary_type = data['type']
+    
+    # Define conversion rates (as of March 2025)
+    conversion_rates = {
+        'PLN': 1.0,
+        'EUR': 4.32,  # 1 EUR = 4.32 PLN
+        'USD': 3.95,  # 1 USD = 3.95 PLN
+        'GBP': 5.10   # 1 GBP = 5.10 PLN
+    }
+    
+    # Convert to PLN
+    amount_in_pln = amount * conversion_rates.get(currency, 1.0)
+    
+    # Convert to yearly based on type
+    if salary_type == 'hourly':
+        # Assuming 40 hours per week, 52 weeks per year
+        yearly_amount = amount_in_pln * 40 * 52
+    elif salary_type == 'monthly':
+        # 12 months per year
+        yearly_amount = amount_in_pln * 12
+    else:  # yearly
+        yearly_amount = amount_in_pln
+    
+    # Calculate in other currencies
+    result = {
+        'yearly': {
+            'PLN': yearly_amount,
+            'EUR': yearly_amount / conversion_rates['EUR'],
+            'USD': yearly_amount / conversion_rates['USD'],
+            'GBP': yearly_amount / conversion_rates['GBP']
+        },
+        'monthly': {
+            'PLN': yearly_amount / 12,
+            'EUR': (yearly_amount / 12) / conversion_rates['EUR'],
+            'USD': (yearly_amount / 12) / conversion_rates['USD'],
+            'GBP': (yearly_amount / 12) / conversion_rates['GBP']
+        },
+        'hourly': {
+            'PLN': yearly_amount / (40 * 52),
+            'EUR': (yearly_amount / (40 * 52)) / conversion_rates['EUR'],
+            'USD': (yearly_amount / (40 * 52)) / conversion_rates['USD'],
+            'GBP': (yearly_amount / (40 * 52)) / conversion_rates['GBP']
+        }
+    }
+    
+    return jsonify(result)
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
@@ -202,23 +291,35 @@ def get_stats():
         LIMIT 5
     ''').fetchall()
     
-    # Get applications by date
-    date_counts = conn.execute('''
-        SELECT date_applied, COUNT(*) as count 
+    # Get average salary (for applications with salary_amount > 0)
+    avg_salary = conn.execute('''
+        SELECT AVG(salary_amount) as avg_salary 
         FROM applications 
-        GROUP BY date_applied 
-        ORDER BY date_applied DESC 
-        LIMIT 30
-    ''').fetchall()
+        WHERE salary_amount > 0
+    ''').fetchone()
+    
+    # Get salary range
+    salary_range = conn.execute('''
+        SELECT MIN(salary_amount) as min_salary, MAX(salary_amount) as max_salary 
+        FROM applications 
+        WHERE salary_amount > 0
+    ''').fetchone()
     
     conn.close()
     
-    return jsonify({
+    # Format results
+    result = {
         'total_applications': total_count,
-        'status_breakdown': [dict(item) for item in status_counts],
-        'top_companies': [dict(item) for item in company_counts],
-        'recent_activity': [dict(item) for item in date_counts]
-    })
+        'status_distribution': [dict(row) for row in status_counts],
+        'top_companies': [dict(row) for row in company_counts],
+        'salary_stats': {
+            'average': avg_salary['avg_salary'] if avg_salary['avg_salary'] else 0,
+            'min': salary_range['min_salary'] if salary_range and salary_range['min_salary'] else 0,
+            'max': salary_range['max_salary'] if salary_range and salary_range['max_salary'] else 0
+        }
+    }
+    
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
