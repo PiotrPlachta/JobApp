@@ -29,11 +29,15 @@ def init_db():
         url TEXT,
         date_posted TEXT,
         date_applied TEXT,
-        cv_path TEXT
+        cv_path TEXT,
+        status TEXT DEFAULT 'Applied',
+        notes TEXT,
+        last_updated TEXT
     )
     ''')
     conn.commit()
     conn.close()
+    print(f"Database initialized at {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'applications.db')}")
 
 # Initialize database on startup
 init_db()
@@ -41,7 +45,7 @@ init_db()
 @app.route('/api/applications', methods=['GET'])
 def get_applications():
     conn = get_db_connection()
-    applications = conn.execute('SELECT * FROM applications').fetchall()
+    applications = conn.execute('SELECT * FROM applications ORDER BY date_applied DESC').fetchall()
     conn.close()
     
     # Convert to list of dictionaries
@@ -63,14 +67,18 @@ def add_application():
     data.setdefault('date_posted', '')
     data.setdefault('date_applied', datetime.now().strftime('%Y-%m-%d'))
     data.setdefault('cv_path', '')
+    data.setdefault('status', 'Applied')
+    data.setdefault('notes', '')
+    data.setdefault('last_updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
-    INSERT INTO applications (company, role, salary, url, date_posted, date_applied, cv_path)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO applications (company, role, salary, url, date_posted, date_applied, cv_path, status, notes, last_updated)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (data['company'], data['role'], data['salary'], data['url'], 
-          data['date_posted'], data['date_applied'], data['cv_path']))
+          data['date_posted'], data['date_applied'], data['cv_path'], 
+          data['status'], data['notes'], data['last_updated']))
     conn.commit()
     
     # Get the ID of the inserted application
@@ -102,16 +110,20 @@ def update_application(app_id):
         return jsonify({'error': 'Application not found'}), 404
     
     # Update fields
-    fields = ['company', 'role', 'salary', 'url', 'date_posted', 'date_applied', 'cv_path']
+    fields = ['company', 'role', 'salary', 'url', 'date_posted', 'date_applied', 'cv_path', 'status', 'notes']
     updates = {field: data.get(field, dict(application)[field]) for field in fields}
+    
+    # Always update the last_updated timestamp
+    updates['last_updated'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     cursor = conn.cursor()
     cursor.execute('''
     UPDATE applications
-    SET company = ?, role = ?, salary = ?, url = ?, date_posted = ?, date_applied = ?, cv_path = ?
+    SET company = ?, role = ?, salary = ?, url = ?, date_posted = ?, date_applied = ?, cv_path = ?, status = ?, notes = ?, last_updated = ?
     WHERE id = ?
     ''', (updates['company'], updates['role'], updates['salary'], updates['url'],
-          updates['date_posted'], updates['date_applied'], updates['cv_path'], app_id))
+          updates['date_posted'], updates['date_applied'], updates['cv_path'], 
+          updates['status'], updates['notes'], updates['last_updated'], app_id))
     conn.commit()
     conn.close()
     
@@ -133,6 +145,21 @@ def delete_application(app_id):
     
     return jsonify({'message': 'Application deleted successfully'})
 
+@app.route('/api/application-statuses', methods=['GET'])
+def get_application_statuses():
+    # Return a list of possible application statuses
+    statuses = [
+        'Applied',
+        'Phone Screen',
+        'Technical Interview',
+        'Onsite Interview',
+        'Offer',
+        'Rejected',
+        'Withdrawn',
+        'Not Interested'
+    ]
+    return jsonify(statuses)
+
 @app.route('/api/analyze-url', methods=['POST'])
 def analyze_url():
     data = request.json
@@ -151,6 +178,47 @@ def analyze_url():
     }
     
     return jsonify(mock_analysis)
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    conn = get_db_connection()
+    
+    # Get total applications count
+    total_count = conn.execute('SELECT COUNT(*) as count FROM applications').fetchone()['count']
+    
+    # Get applications by status
+    status_counts = conn.execute('''
+        SELECT status, COUNT(*) as count 
+        FROM applications 
+        GROUP BY status
+    ''').fetchall()
+    
+    # Get applications by company
+    company_counts = conn.execute('''
+        SELECT company, COUNT(*) as count 
+        FROM applications 
+        GROUP BY company 
+        ORDER BY count DESC 
+        LIMIT 5
+    ''').fetchall()
+    
+    # Get applications by date
+    date_counts = conn.execute('''
+        SELECT date_applied, COUNT(*) as count 
+        FROM applications 
+        GROUP BY date_applied 
+        ORDER BY date_applied DESC 
+        LIMIT 30
+    ''').fetchall()
+    
+    conn.close()
+    
+    return jsonify({
+        'total_applications': total_count,
+        'status_breakdown': [dict(item) for item in status_counts],
+        'top_companies': [dict(item) for item in company_counts],
+        'recent_activity': [dict(item) for item in date_counts]
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
