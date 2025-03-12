@@ -10,8 +10,11 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Collapse,
+  IconButton
 } from '@mui/material';
+import { ExpandMore, ExpandLess } from '@mui/icons-material';
 import axios from 'axios';
 
 const ApplicationForm = ({ onApplicationAdded }) => {
@@ -31,6 +34,7 @@ const ApplicationForm = ({ onApplicationAdded }) => {
   const [analyzing, setAnalyzing] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState(['Applied']);
+  const [expanded, setExpanded] = useState(false);
 
   // Fetch available status options when component mounts
   useEffect(() => {
@@ -111,6 +115,7 @@ const ApplicationForm = ({ onApplicationAdded }) => {
       }
       
       alert('Application saved successfully!');
+      setExpanded(false);
     } catch (error) {
       console.error('Error saving application:', error);
       alert('Failed to save the application. Please try again.');
@@ -119,169 +124,185 @@ const ApplicationForm = ({ onApplicationAdded }) => {
     }
   };
 
+  const toggleExpanded = () => {
+    setExpanded(!expanded);
+  };
+
   return (
     <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-      <Typography variant="h5" component="h2" gutterBottom>
-        Add New Job Application
-      </Typography>
-      
-      <Box component="form" onSubmit={handleSubmit}>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Job URL"
-              name="url"
-              value={formData.url}
-              onChange={handleInputChange}
-              margin="normal"
-              helperText="Enter the job posting URL to auto-fill details"
-            />
-            <Button
-              variant="outlined"
-              onClick={analyzeUrl}
-              disabled={!formData.url || analyzing}
-              sx={{ mt: 1 }}
-            >
-              {analyzing ? <CircularProgress size={24} /> : 'Analyze URL'}
-            </Button>
-          </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              required
-              label="Company"
-              name="company"
-              value={formData.company}
-              onChange={handleInputChange}
-              margin="normal"
-            />
-          </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              required
-              label="Role"
-              name="role"
-              value={formData.role}
-              onChange={handleInputChange}
-              margin="normal"
-            />
-          </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              label="Salary"
-              name="salary"
-              value={formData.salary}
-              onChange={handleInputChange}
-              margin="normal"
-              helperText="Optional"
-            />
-          </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              label="Date Posted"
-              name="date_posted"
-              type="date"
-              value={formData.date_posted}
-              onChange={handleInputChange}
-              margin="normal"
-              InputLabelProps={{ shrink: true }}
-              helperText="Optional"
-            />
-          </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              required
-              label="Date Applied"
-              name="date_applied"
-              type="date"
-              value={formData.date_applied}
-              onChange={handleInputChange}
-              margin="normal"
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth margin="normal">
-              <InputLabel id="status-label">Application Status</InputLabel>
-              <Select
-                labelId="status-label"
-                name="status"
-                value={formData.status}
-                onChange={handleInputChange}
-                label="Application Status"
-              >
-                {statusOptions.map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {status}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Notes"
-              name="notes"
-              value={formData.notes}
-              onChange={handleInputChange}
-              margin="normal"
-              multiline
-              rows={3}
-              helperText="Add any notes about this application"
-            />
-          </Grid>
-          
-          <Grid item xs={12}>
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                CV/Resume File
-              </Typography>
-              <input
-                accept=".pdf,.doc,.docx"
-                style={{ display: 'none' }}
-                id="cv-file-input"
-                type="file"
-                onChange={handleFileChange}
-              />
-              <label htmlFor="cv-file-input">
-                <Button variant="contained" component="span">
-                  Select CV File
-                </Button>
-              </label>
-              {file && (
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  Selected file: {file.name}
-                </Typography>
-              )}
-            </Box>
-          </Grid>
-          
-          <Grid item xs={12}>
-            <Button
-              type="submit"
-              variant="contained"
-              color="primary"
-              disabled={submitLoading}
-              sx={{ mt: 2 }}
-            >
-              {submitLoading ? <CircularProgress size={24} /> : 'Save Application'}
-            </Button>
-          </Grid>
-        </Grid>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" component="h2">
+          Add New Job Application
+        </Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={expanded ? <ExpandLess /> : <ExpandMore />}
+          onClick={toggleExpanded}
+        >
+          {expanded ? 'Hide Form' : 'Show Form'}
+        </Button>
       </Box>
+      
+      <Collapse in={expanded} timeout="auto">
+        <Box component="form" onSubmit={handleSubmit}>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Job URL"
+                name="url"
+                value={formData.url}
+                onChange={handleInputChange}
+                margin="normal"
+                helperText="Enter the job posting URL to auto-fill details"
+              />
+              <Button
+                variant="outlined"
+                onClick={analyzeUrl}
+                disabled={!formData.url || analyzing}
+                sx={{ mt: 1 }}
+              >
+                {analyzing ? <CircularProgress size={24} /> : 'Analyze URL'}
+              </Button>
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                required
+                label="Company"
+                name="company"
+                value={formData.company}
+                onChange={handleInputChange}
+                margin="normal"
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                required
+                label="Role"
+                name="role"
+                value={formData.role}
+                onChange={handleInputChange}
+                margin="normal"
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Salary"
+                name="salary"
+                value={formData.salary}
+                onChange={handleInputChange}
+                margin="normal"
+                helperText="Optional"
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Date Posted"
+                name="date_posted"
+                type="date"
+                value={formData.date_posted}
+                onChange={handleInputChange}
+                margin="normal"
+                InputLabelProps={{ shrink: true }}
+                helperText="Optional"
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                required
+                label="Date Applied"
+                name="date_applied"
+                type="date"
+                value={formData.date_applied}
+                onChange={handleInputChange}
+                margin="normal"
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="status-label">Application Status</InputLabel>
+                <Select
+                  labelId="status-label"
+                  name="status"
+                  value={formData.status}
+                  onChange={handleInputChange}
+                  label="Application Status"
+                >
+                  {statusOptions.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                name="notes"
+                value={formData.notes}
+                onChange={handleInputChange}
+                margin="normal"
+                multiline
+                rows={3}
+                helperText="Add any notes about this application"
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  CV/Resume File
+                </Typography>
+                <input
+                  accept=".pdf,.doc,.docx"
+                  style={{ display: 'none' }}
+                  id="cv-file-input"
+                  type="file"
+                  onChange={handleFileChange}
+                />
+                <label htmlFor="cv-file-input">
+                  <Button variant="contained" component="span">
+                    Select CV File
+                  </Button>
+                </label>
+                {file && (
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Selected file: {file.name}
+                  </Typography>
+                )}
+              </Box>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                disabled={submitLoading}
+                sx={{ mt: 2 }}
+              >
+                {submitLoading ? <CircularProgress size={24} /> : 'Save Application'}
+              </Button>
+            </Grid>
+          </Grid>
+        </Box>
+      </Collapse>
     </Paper>
   );
 };
