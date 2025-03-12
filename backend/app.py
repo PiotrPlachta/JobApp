@@ -194,20 +194,47 @@ def analyze_url():
     if 'url' not in data:
         return jsonify({'error': 'URL is required'}), 400
     
-    # This is a placeholder for the LLM integration
-    # In a real implementation, this would call an LLM to analyze the job posting URL
-    # For now, return mock data
-    mock_analysis = {
-        'company': 'Example Company',
-        'role': 'Software Developer',
-        'salary': '100,000 PLN per year',
-        'salary_amount': 100000,
-        'salary_currency': 'PLN',
-        'salary_type': 'yearly',
-        'date_posted': datetime.now().strftime('%Y-%m-%d')
-    }
-    
-    return jsonify(mock_analysis)
+    try:
+        # Import the LLM utilities
+        from utils.llm_utils import process_job_posting_url
+        import json
+        
+        # Process the URL
+        result = process_job_posting_url(data['url'])
+        
+        # If result is a string (JSON), parse it
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError:
+                # If parsing fails, return the error
+                return jsonify({'error': 'Failed to parse LLM response'}), 500
+        
+        # Ensure required fields have default values
+        result.setdefault('company', '')
+        result.setdefault('role', '')
+        result.setdefault('salary', '')
+        result.setdefault('salary_amount', 0)
+        result.setdefault('salary_currency', 'PLN')
+        result.setdefault('salary_type', 'yearly')
+        result.setdefault('date_posted', '')
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error in analyze_url: {str(e)}")
+        # Fallback to mock data if there's an error
+        mock_analysis = {
+            'company': 'Example Company',
+            'role': 'Software Developer',
+            'salary': '100,000 PLN per year',
+            'salary_amount': 100000,
+            'salary_currency': 'PLN',
+            'salary_type': 'yearly',
+            'date_posted': datetime.now().strftime('%Y-%m-%d'),
+            'error_message': str(e)
+        }
+        
+        return jsonify(mock_analysis)
 
 @app.route('/api/calculate-yearly-salary', methods=['POST'])
 def calculate_yearly_salary():
