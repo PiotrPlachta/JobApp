@@ -29,6 +29,49 @@ const getStatusColor = (status) => {
   return statusColors[status] || 'default';
 };
 
+const calculateMonthlySalary = (amount, type) => {
+  if (!amount) return null;
+  
+  const numericAmount = parseFloat(amount);
+  if (isNaN(numericAmount)) return null;
+  
+  switch (type) {
+    case 'hourly':
+      // Assuming 40 hours per week, 4.33 weeks per month
+      return (numericAmount * 40 * 4.33).toFixed(2);
+    case 'monthly':
+      return numericAmount.toFixed(2);
+    case 'yearly':
+      return (numericAmount / 12).toFixed(2);
+    default:
+      return numericAmount.toFixed(2);
+  }
+};
+
+const calculateYearlySalary = (amount, type) => {
+  if (!amount) return null;
+  
+  const numericAmount = parseFloat(amount);
+  if (isNaN(numericAmount)) return null;
+  
+  switch (type) {
+    case 'hourly':
+      // Assuming 40 hours per week, 52 weeks per year
+      return (numericAmount * 40 * 52).toFixed(2);
+    case 'monthly':
+      return (numericAmount * 12).toFixed(2);
+    case 'yearly':
+      return numericAmount.toFixed(2);
+    default:
+      return numericAmount.toFixed(2);
+  }
+};
+
+const formatCurrency = (amount, currency) => {
+  if (!amount) return 'Not specified';
+  return `${amount} ${currency || 'PLN'}`;
+};
+
 const ApplicationRow = ({ application, onDelete, onEdit }) => {
   const [open, setOpen] = useState(false);
 
@@ -66,6 +109,11 @@ const ApplicationRow = ({ application, onDelete, onEdit }) => {
           />
         </TableCell>
         <TableCell>{formatDate(application.date_applied)}</TableCell>
+        <TableCell>
+          {application.salary_amount && application.salary_currency ? 
+            formatCurrency(calculateMonthlySalary(application.salary_amount, application.salary_type), application.salary_currency) : 
+            'Not specified'}
+        </TableCell>
         <TableCell align="right">
           <IconButton aria-label="edit" onClick={() => onEdit(application)}>
             <EditIcon />
@@ -76,7 +124,7 @@ const ApplicationRow = ({ application, onDelete, onEdit }) => {
         </TableCell>
       </TableRow>
       <TableRow>
-        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
+        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ margin: 1 }}>
               <Typography variant="h6" gutterBottom component="div">
@@ -85,7 +133,9 @@ const ApplicationRow = ({ application, onDelete, onEdit }) => {
               <Table size="small" aria-label="application details">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Salary</TableCell>
+                    <TableCell>Original Salary</TableCell>
+                    <TableCell>Monthly Equivalent</TableCell>
+                    <TableCell>Yearly Equivalent</TableCell>
                     <TableCell>Date Posted</TableCell>
                     <TableCell>URL</TableCell>
                     <TableCell>CV</TableCell>
@@ -94,7 +144,21 @@ const ApplicationRow = ({ application, onDelete, onEdit }) => {
                 </TableHead>
                 <TableBody>
                   <TableRow>
-                    <TableCell>{application.salary || 'Not specified'}</TableCell>
+                    <TableCell>
+                      {application.salary_amount && application.salary_currency ? 
+                        `${application.salary_amount} ${application.salary_currency}/${application.salary_type || 'yearly'}` : 
+                        'Not specified'}
+                    </TableCell>
+                    <TableCell>
+                      {application.salary_amount && application.salary_currency ? 
+                        formatCurrency(calculateMonthlySalary(application.salary_amount, application.salary_type), application.salary_currency) : 
+                        'Not specified'}
+                    </TableCell>
+                    <TableCell>
+                      {application.salary_amount && application.salary_currency ? 
+                        formatCurrency(calculateYearlySalary(application.salary_amount, application.salary_type), application.salary_currency) : 
+                        'Not specified'}
+                    </TableCell>
                     <TableCell>{application.date_posted ? formatDate(application.date_posted) : 'Not specified'}</TableCell>
                     <TableCell>
                       {application.url ? (
@@ -186,6 +250,7 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
                   <TableCell>Role</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Date Applied</TableCell>
+                  <TableCell>Monthly Salary</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
