@@ -328,7 +328,7 @@ const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
       aria-labelledby="form-dialog-title"
     >
       <DialogTitle id="form-dialog-title">
-        Add New Job Application
+        {initialData ? 'Update Job Application' : 'Add New Job Application'}
         <IconButton
           aria-label="close"
           onClick={onClose}
@@ -687,7 +687,7 @@ const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
           variant="contained"
           disabled={submitting || !formData.company || !formData.role || !formData.url}
         >
-          {submitting ? 'Submitting...' : 'Add Application'}
+          {submitting ? 'Submitting...' : initialData ? 'Update Application' : 'Add Application'}
         </Button>
       </DialogActions>
     </Dialog>

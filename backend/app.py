@@ -20,29 +20,50 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Drop existing table to recreate with updated schema
-    cursor.execute('DROP TABLE IF EXISTS applications')
+    # Check if the applications table exists
+    table_exists = cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='applications'").fetchone()
     
-    # Create tables if they don't exist
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS applications (
-        id INTEGER PRIMARY KEY,
-        company TEXT,
-        role TEXT,
-        salary TEXT,
-        salary_amount REAL,
-        salary_currency TEXT DEFAULT 'PLN',
-        salary_type TEXT DEFAULT 'yearly',
-        url TEXT,
-        date_posted TEXT,
-        date_applied TEXT,
-        cv_path TEXT,
-        cover_letter_path TEXT,
-        status TEXT DEFAULT 'Applied',
-        notes TEXT,
-        last_updated TEXT
-    )
-    ''')
+    if not table_exists:
+        # Create the table if it doesn't exist
+        print("Creating applications table for the first time")
+        cursor.execute('''
+        CREATE TABLE applications (
+            id INTEGER PRIMARY KEY,
+            company TEXT,
+            role TEXT,
+            salary TEXT,
+            salary_amount REAL,
+            salary_currency TEXT DEFAULT 'PLN',
+            salary_type TEXT DEFAULT 'yearly',
+            url TEXT,
+            date_posted TEXT,
+            date_applied TEXT,
+            cv_path TEXT,
+            cover_letter_path TEXT,
+            status TEXT DEFAULT 'Applied',
+            notes TEXT,
+            last_updated TEXT
+        )
+        ''')
+    else:
+        # Check if we need to add new columns to the existing table
+        columns = [row[1] for row in cursor.execute('PRAGMA table_info(applications)').fetchall()]
+        
+        # Add salary_amount column if it doesn't exist
+        if 'salary_amount' not in columns:
+            print("Adding salary_amount column to applications table")
+            cursor.execute('ALTER TABLE applications ADD COLUMN salary_amount REAL DEFAULT 0')
+        
+        # Add salary_currency column if it doesn't exist
+        if 'salary_currency' not in columns:
+            print("Adding salary_currency column to applications table")
+            cursor.execute('ALTER TABLE applications ADD COLUMN salary_currency TEXT DEFAULT "PLN"')
+        
+        # Add salary_type column if it doesn't exist
+        if 'salary_type' not in columns:
+            print("Adding salary_type column to applications table")
+            cursor.execute('ALTER TABLE applications ADD COLUMN salary_type TEXT DEFAULT "yearly"')
+    
     conn.commit()
     conn.close()
     print(f"Database initialized at {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'applications.db')}")
