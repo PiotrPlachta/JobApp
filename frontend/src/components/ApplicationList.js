@@ -12,6 +12,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
+import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import axios from 'axios';
 
 const statusColors = {
@@ -76,8 +78,13 @@ const formatCurrency = (amount, currency) => {
   return `${amount} ${currency || 'PLN'}`;
 };
 
-const ApplicationRow = ({ application, onDelete, onEdit }) => {
+const ApplicationRow = ({ application, onDelete, onEdit, isOpen }) => {
   const [open, setOpen] = useState(false);
+  
+  // Update open state when isOpen prop changes
+  useEffect(() => {
+    setOpen(isOpen);
+  }, [isOpen]);
 
   const handleDelete = async () => {
     if (window.confirm(`Are you sure you want to delete the application for ${application.company}?`)) {
@@ -224,6 +231,7 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
   const [showFilters, setShowFilters] = useState(false);
   const [statuses, setStatuses] = useState([]);
   const [filteredApplications, setFilteredApplications] = useState([]);
+  const [allExpanded, setAllExpanded] = useState(false);
 
   // Fetch statuses for filter dropdown
   useEffect(() => {
@@ -322,6 +330,15 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
     handleRequestSort(property);
   };
 
+  const handleExpandAll = () => {
+    setAllExpanded(!allExpanded);
+  };
+
+  // Reset expanded state when applications change
+  useEffect(() => {
+    setAllExpanded(false);
+  }, [applications]);
+
   return (
     <Paper sx={{ width: '100%', overflow: 'hidden', mb: 4 }}>
       {loading ? (
@@ -357,6 +374,11 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
                   <FilterListIcon />
                 </IconButton>
               </Tooltip>
+              <Tooltip title="Expand/Collapse All">
+                <IconButton onClick={handleExpandAll} sx={{ mr: 1 }}>
+                  {allExpanded ? <UnfoldLessIcon /> : <UnfoldMoreIcon />}
+                </IconButton>
+              </Tooltip>
               <Button
                 variant="contained"
                 color="primary"
@@ -369,7 +391,7 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
           </Box>
           
           {showFilters && (
-            <Box sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
+            <Box sx={{ mb: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
               <Grid container spacing={2} alignItems="center">
                 <Grid item xs={12} sm={6} md={2}>
                   <TextField
@@ -398,6 +420,7 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
                       labelId="status-filter-label"
                       name="status"
                       value={filters.status}
+                      label="Status"
                       onChange={handleFilterChange}
                       input={<OutlinedInput label="Status" />}
                     >
@@ -450,7 +473,7 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
             </Box>
           )}
           
-          <TableContainer sx={{ maxHeight: 440 }}>
+          <TableContainer>
             <Table stickyHeader aria-label="collapsible table">
               <TableHead>
                 <TableRow>
@@ -519,6 +542,7 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
                     application={application} 
                     onDelete={onDelete}
                     onEdit={onEdit}
+                    isOpen={allExpanded}
                   />
                 ))}
               </TableBody>
