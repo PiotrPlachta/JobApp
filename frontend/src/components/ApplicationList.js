@@ -1,92 +1,47 @@
 import React, { useState } from 'react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Typography,
-  IconButton,
-  Box,
-  Collapse,
-  Chip,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Grid
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  Collapse, Box, Typography, IconButton, Button, CircularProgress, Alert, Chip
 } from '@mui/material';
-import {
-  KeyboardArrowDown,
-  KeyboardArrowUp,
-  Delete,
-  Edit,
-  Description,
-  Save,
-  Cancel
-} from '@mui/icons-material';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import AddIcon from '@mui/icons-material/Add';
 import axios from 'axios';
 
 const statusColors = {
-  'Applied': 'default',
-  'Phone Screen': 'info',
-  'Technical Interview': 'primary',
-  'Onsite Interview': 'secondary',
+  'Applied': 'info',
+  'Interview': 'warning',
   'Offer': 'success',
   'Rejected': 'error',
-  'Withdrawn': 'warning',
+  'Withdrawn': 'default',
   'Not Interested': 'default'
 };
 
-const ApplicationRow = ({ application, onDelete, onRefresh, statusOptions }) => {
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return date.toLocaleDateString();
+};
+
+const getStatusColor = (status) => {
+  return statusColors[status] || 'default';
+};
+
+const ApplicationRow = ({ application, onDelete, onEdit }) => {
   const [open, setOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [editData, setEditData] = useState({ ...application });
 
   const handleDelete = async () => {
-    try {
-      await axios.delete(`http://localhost:5000/api/applications/${application.id}`);
-      setDeleteDialogOpen(false);
-      onDelete(application.id);
-    } catch (error) {
-      console.error('Error deleting application:', error);
-      alert('Failed to delete the application. Please try again.');
+    if (window.confirm(`Are you sure you want to delete the application for ${application.company}?`)) {
+      try {
+        await axios.delete(`http://localhost:5000/api/applications/${application.id}`);
+        onDelete(application.id);
+      } catch (error) {
+        console.error('Error deleting application:', error);
+        alert('Failed to delete application. Please try again.');
+      }
     }
-  };
-
-  const handleEdit = () => {
-    setEditData({ ...application });
-    setEditMode(true);
-  };
-
-  const handleCancelEdit = () => {
-    setEditMode(false);
-  };
-
-  const handleSaveEdit = async () => {
-    try {
-      await axios.put(`http://localhost:5000/api/applications/${application.id}`, editData);
-      setEditMode(false);
-      onRefresh();
-    } catch (error) {
-      console.error('Error updating application:', error);
-      alert('Failed to update the application. Please try again.');
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setEditData({ ...editData, [name]: value });
   };
 
   return (
@@ -98,31 +53,25 @@ const ApplicationRow = ({ application, onDelete, onRefresh, statusOptions }) => 
             size="small"
             onClick={() => setOpen(!open)}
           >
-            {open ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
           </IconButton>
         </TableCell>
-        <TableCell component="th" scope="row">
-          {application.company}
-        </TableCell>
+        <TableCell component="th" scope="row">{application.company}</TableCell>
         <TableCell>{application.role}</TableCell>
         <TableCell>
           <Chip 
             label={application.status} 
-            color={statusColors[application.status] || 'default'}
-            size="small"
+            color={getStatusColor(application.status)} 
+            size="small" 
           />
         </TableCell>
-        <TableCell>{application.date_applied}</TableCell>
-        <TableCell>
-          <IconButton size="small" color="primary" onClick={handleEdit}>
-            <Edit />
+        <TableCell>{formatDate(application.date_applied)}</TableCell>
+        <TableCell align="right">
+          <IconButton aria-label="edit" onClick={() => onEdit(application)}>
+            <EditIcon />
           </IconButton>
-          <IconButton 
-            size="small" 
-            color="error" 
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Delete />
+          <IconButton aria-label="delete" onClick={handleDelete}>
+            <DeleteIcon />
           </IconButton>
         </TableCell>
       </TableRow>
@@ -131,255 +80,128 @@ const ApplicationRow = ({ application, onDelete, onRefresh, statusOptions }) => 
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ margin: 1 }}>
               <Typography variant="h6" gutterBottom component="div">
-                Application Details
+                Details
               </Typography>
               <Table size="small" aria-label="application details">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Salary</TableCell>
+                    <TableCell>Date Posted</TableCell>
+                    <TableCell>URL</TableCell>
+                    <TableCell>CV</TableCell>
+                    <TableCell>Cover Letter</TableCell>
+                  </TableRow>
+                </TableHead>
                 <TableBody>
                   <TableRow>
-                    <TableCell component="th" scope="row">Job URL</TableCell>
+                    <TableCell>{application.salary || 'Not specified'}</TableCell>
+                    <TableCell>{application.date_posted ? formatDate(application.date_posted) : 'Not specified'}</TableCell>
                     <TableCell>
-                      <a href={application.url} target="_blank" rel="noopener noreferrer">
-                        {application.url}
-                      </a>
+                      {application.url ? (
+                        <a href={application.url} target="_blank" rel="noopener noreferrer">
+                          View Job Posting
+                        </a>
+                      ) : 'Not available'}
                     </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell component="th" scope="row">Salary</TableCell>
-                    <TableCell>{application.salary || 'N/A'}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell component="th" scope="row">Date Posted</TableCell>
-                    <TableCell>{application.date_posted || 'N/A'}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell component="th" scope="row">CV File</TableCell>
                     <TableCell>
                       {application.cv_path ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Description fontSize="small" sx={{ mr: 1 }} />
-                          {application.cv_path}
-                        </Box>
-                      ) : 'No CV uploaded'}
+                        <a href={`http://localhost:5000${application.cv_path}`} target="_blank" rel="noopener noreferrer">
+                          View CV
+                        </a>
+                      ) : 'Not uploaded'}
                     </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell component="th" scope="row">Notes</TableCell>
-                    <TableCell>{application.notes || 'No notes'}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell component="th" scope="row">Last Updated</TableCell>
-                    <TableCell>{application.last_updated || 'N/A'}</TableCell>
+                    <TableCell>
+                      {application.cover_letter_path ? (
+                        <a href={`http://localhost:5000${application.cover_letter_path}`} target="_blank" rel="noopener noreferrer">
+                          View Cover Letter
+                        </a>
+                      ) : 'Not uploaded'}
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
+              {application.notes && (
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Typography variant="subtitle2" gutterBottom component="div">
+                    Notes
+                  </Typography>
+                  <Typography variant="body2">
+                    {application.notes}
+                  </Typography>
+                </Box>
+              )}
             </Box>
           </Collapse>
         </TableCell>
       </TableRow>
-
-      {/* Edit Dialog */}
-      <Dialog open={editMode} onClose={handleCancelEdit} maxWidth="md" fullWidth>
-        <DialogTitle>Edit Application</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Company"
-                name="company"
-                value={editData.company}
-                onChange={handleInputChange}
-                margin="normal"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Role"
-                name="role"
-                value={editData.role}
-                onChange={handleInputChange}
-                margin="normal"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Salary"
-                name="salary"
-                value={editData.salary || ''}
-                onChange={handleInputChange}
-                margin="normal"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="URL"
-                name="url"
-                value={editData.url}
-                onChange={handleInputChange}
-                margin="normal"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Date Posted"
-                name="date_posted"
-                type="date"
-                value={editData.date_posted || ''}
-                onChange={handleInputChange}
-                margin="normal"
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Date Applied"
-                name="date_applied"
-                type="date"
-                value={editData.date_applied}
-                onChange={handleInputChange}
-                margin="normal"
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth margin="normal">
-                <InputLabel id="edit-status-label">Application Status</InputLabel>
-                <Select
-                  labelId="edit-status-label"
-                  name="status"
-                  value={editData.status || 'Applied'}
-                  onChange={handleInputChange}
-                  label="Application Status"
-                >
-                  {statusOptions.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                name="notes"
-                value={editData.notes || ''}
-                onChange={handleInputChange}
-                margin="normal"
-                multiline
-                rows={3}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelEdit} startIcon={<Cancel />}>Cancel</Button>
-          <Button onClick={handleSaveEdit} color="primary" startIcon={<Save />}>Save Changes</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
-      >
-        <DialogTitle id="alert-dialog-title">
-          Delete Application
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText id="alert-dialog-description">
-            Are you sure you want to delete this job application for {application.role} at {application.company}? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDelete} color="error" autoFocus>
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
     </React.Fragment>
   );
 };
 
-const ApplicationList = ({ applications, onDelete, onRefresh }) => {
-  const [statusOptions, setStatusOptions] = useState([
-    'Applied',
-    'Phone Screen',
-    'Technical Interview',
-    'Onsite Interview',
-    'Offer',
-    'Rejected',
-    'Withdrawn',
-    'Not Interested'
-  ]);
-
-  // Fetch status options when component mounts
-  React.useEffect(() => {
-    const fetchStatusOptions = async () => {
-      try {
-        const response = await axios.get('http://localhost:5000/api/application-statuses');
-        setStatusOptions(response.data);
-      } catch (error) {
-        console.error('Error fetching status options:', error);
-      }
-    };
-    
-    fetchStatusOptions();
-  }, []);
-
+const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAddClick }) => {
   return (
-    <Paper elevation={3} sx={{ width: '100%', overflow: 'hidden' }}>
-      <Typography variant="h5" component="h2" gutterBottom sx={{ p: 2 }}>
-        Your Job Applications
-        <Chip 
-          label={`${applications.length} Applications`} 
-          color="primary" 
-          size="small" 
-          sx={{ ml: 2 }}
-        />
-      </Typography>
-      
-      {applications.length === 0 ? (
+    <Paper sx={{ width: '100%', overflow: 'hidden', mb: 4 }}>
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+          <CircularProgress />
+        </Box>
+      ) : error ? (
+        <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>
+      ) : applications.length === 0 ? (
         <Box sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="body1" color="text.secondary">
-            No job applications found. Add your first application using the form above.
+          <Typography variant="body1" gutterBottom>
+            No applications found.
           </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={onAddClick}
+            sx={{ mt: 2 }}
+          >
+            Add Application
+          </Button>
         </Box>
       ) : (
-        <TableContainer sx={{ maxHeight: 440 }}>
-          <Table stickyHeader aria-label="collapsible table">
-            <TableHead>
-              <TableRow>
-                <TableCell />
-                <TableCell>Company</TableCell>
-                <TableCell>Role</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Date Applied</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {applications.map((application) => (
-                <ApplicationRow 
-                  key={application.id} 
-                  application={application} 
-                  onDelete={onDelete}
-                  onRefresh={onRefresh}
-                  statusOptions={statusOptions}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2 }}>
+            <Typography variant="h6" component="div">
+              Your Job Applications
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={onAddClick}
+            >
+              Add Application
+            </Button>
+          </Box>
+          <TableContainer sx={{ maxHeight: 440 }}>
+            <Table stickyHeader aria-label="collapsible table">
+              <TableHead>
+                <TableRow>
+                  <TableCell />
+                  <TableCell>Company</TableCell>
+                  <TableCell>Role</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Date Applied</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {applications.map((application) => (
+                  <ApplicationRow 
+                    key={application.id} 
+                    application={application} 
+                    onDelete={onDelete}
+                    onEdit={onEdit}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
     </Paper>
   );

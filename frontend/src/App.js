@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Container, CssBaseline, ThemeProvider, createTheme, Box, CircularProgress } from '@mui/material';
-import axios from 'axios';
-import Header from './components/Header';
-import ApplicationForm from './components/ApplicationForm';
+import { Container, Typography, Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import ApplicationList from './components/ApplicationList';
+import ApplicationForm from './components/ApplicationForm';
+import axios from 'axios';
 
-// Create a theme instance
 const theme = createTheme({
   palette: {
     primary: {
@@ -14,6 +12,9 @@ const theme = createTheme({
     secondary: {
       main: '#dc004e',
     },
+    background: {
+      default: '#f5f5f5',
+    },
   },
 });
 
@@ -21,67 +22,98 @@ function App() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [editingApplication, setEditingApplication] = useState(null);
 
-  // Fetch applications from the API
   const fetchApplications = async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await axios.get('http://localhost:5000/api/applications');
       setApplications(response.data);
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching applications:', err);
+    } catch (error) {
+      console.error('Error fetching applications:', error);
       setError('Failed to load applications. Please try again later.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Load applications when the component mounts
   useEffect(() => {
     fetchApplications();
   }, []);
 
-  // Handle adding a new application
   const handleApplicationAdded = (newApplication) => {
     setApplications([...applications, newApplication]);
+    setFormDialogOpen(false);
   };
 
-  // Handle deleting an application
   const handleApplicationDeleted = (id) => {
     setApplications(applications.filter(app => app.id !== id));
+  };
+
+  const handleEditApplication = (application) => {
+    setEditingApplication(application);
+    setFormDialogOpen(true);
+  };
+
+  const handleApplicationUpdated = (updatedApplication) => {
+    setApplications(applications.map(app => 
+      app.id === updatedApplication.id ? updatedApplication : app
+    ));
+    setFormDialogOpen(false);
+    setEditingApplication(null);
+  };
+
+  const handleSubmitApplication = async (formData) => {
+    try {
+      if (editingApplication) {
+        // Update existing application
+        const response = await axios.put(`http://localhost:5000/api/applications/${editingApplication.id}`, formData);
+        handleApplicationUpdated(response.data);
+      } else {
+        // Add new application
+        const response = await axios.post('http://localhost:5000/api/applications', formData);
+        handleApplicationAdded(response.data);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error submitting application:', error);
+      return false;
+    }
   };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Header />
-      <Container maxWidth="lg">
-        <ApplicationForm onSubmit={async (formData) => {
-          try {
-            const response = await axios.post('http://localhost:5000/api/applications', formData);
-            handleApplicationAdded(response.data);
-          } catch (err) {
-            console.error('Error adding application:', err);
-            setError('Failed to add application. Please try again.');
-          }
-        }} />
-        
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : error ? (
-          <Box sx={{ mt: 4, color: 'error.main', textAlign: 'center' }}>
-            {error}
-          </Box>
-        ) : (
-          <ApplicationList 
-            applications={applications} 
-            onDelete={handleApplicationDeleted} 
-            onRefresh={fetchApplications} 
-          />
-        )}
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Job Application Tracker
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary" paragraph>
+            Keep track of your job applications, interviews, and offers in one place.
+          </Typography>
+        </Box>
+
+        <ApplicationList 
+          applications={applications} 
+          loading={loading} 
+          error={error} 
+          onDelete={handleApplicationDeleted} 
+          onEdit={handleEditApplication}
+          onAddClick={() => setFormDialogOpen(true)}
+        />
+
+        <ApplicationForm 
+          open={formDialogOpen} 
+          onClose={() => {
+            setFormDialogOpen(false);
+            setEditingApplication(null);
+          }} 
+          onSubmit={handleSubmitApplication}
+          initialData={editingApplication}
+        />
       </Container>
     </ThemeProvider>
   );

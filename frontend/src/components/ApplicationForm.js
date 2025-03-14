@@ -3,16 +3,16 @@ import {
   Button, TextField, Grid, Typography, Paper, 
   MenuItem, Select, FormControl, InputLabel,
   Table, TableBody, TableCell, TableContainer, 
-  TableHead, TableRow, IconButton, Collapse,
-  Box, CircularProgress, Alert, Input
+  TableHead, TableRow, IconButton,
+  Box, CircularProgress, Alert,
+  Dialog, DialogActions, DialogContent, DialogTitle
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import CloseIcon from '@mui/icons-material/Close';
 import axios from 'axios';
 
-const ApplicationForm = ({ onSubmit, initialData }) => {
+const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
   // Form state
   const [formData, setFormData] = useState({
     company: '',
@@ -31,7 +31,8 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
   });
 
   // UI state
-  const [expanded, setExpanded] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const [statuses, setStatuses] = useState([]);
   const [currencies, setCurrencies] = useState([]);
   const [salaryTypes, setSalaryTypes] = useState([]);
@@ -48,6 +49,38 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
   const [cvFileName, setCvFileName] = useState('');
   const [coverLetterFileName, setCoverLetterFileName] = useState('');
   const [fileUploadError, setFileUploadError] = useState(null);
+
+  // Reset form when dialog is opened
+  useEffect(() => {
+    if (open) {
+      // Reset form state when dialog opens
+      if (!initialData) {
+        setFormData({
+          company: '',
+          role: '',
+          salary: '',
+          salary_amount: 0,
+          salary_currency: 'PLN',
+          salary_type: 'yearly',
+          url: '',
+          date_posted: '',
+          date_applied: new Date().toISOString().split('T')[0],
+          cv_path: '',
+          cover_letter_path: '',
+          status: 'Applied',
+          notes: ''
+        });
+        setCvFileName('');
+        setCoverLetterFileName('');
+      }
+      
+      // Reset UI state
+      setSubmitError(null);
+      setAnalysisError(null);
+      setFileUploadError(null);
+      setShowSalaryResults(false);
+    }
+  }, [open, initialData]);
 
   useEffect(() => {
     // Initialize form with initial data if provided
@@ -86,12 +119,27 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (typeof onSubmit === 'function') {
-      onSubmit(formData);
-    } else {
-      console.error('onSubmit is not a function');
+    setSubmitting(true);
+    setSubmitError(null);
+    
+    try {
+      if (typeof onSubmit === 'function') {
+        const success = await onSubmit(formData);
+        if (success) {
+          // Form was submitted successfully
+          // The dialog will be closed by the parent component
+        }
+      } else {
+        console.error('onSubmit is not a function');
+        setSubmitError('An error occurred while submitting the form.');
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      setSubmitError('Failed to submit the application. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -199,7 +247,7 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
       console.error(`Error uploading ${fileType}:`, error);
       setFileUploadError(`Failed to upload ${fileType}. Please try again.`);
     } finally {
-      // Reset uploading state
+      // Clear uploading state
       if (fileType === 'cv') {
         setCvUploading(false);
       } else {
@@ -208,202 +256,124 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
     }
   };
 
-  const formatCurrency = (value, currency) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-      maximumFractionDigits: 0
-    }).format(value);
+  // Helper function to safely format numbers
+  const formatNumber = (value) => {
+    if (typeof value === 'number') {
+      return value.toLocaleString();
+    }
+    return '0';
   };
 
   return (
-    <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" component="h2">
-          {initialData ? 'Edit Application' : 'Add New Application'}
-        </Typography>
-        <IconButton onClick={() => setExpanded(!expanded)}>
-          {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="md" 
+      fullWidth
+      scroll="paper"
+      aria-labelledby="form-dialog-title"
+    >
+      <DialogTitle id="form-dialog-title">
+        Add New Job Application
+        <IconButton
+          aria-label="close"
+          onClick={onClose}
+          sx={{
+            position: 'absolute',
+            right: 8,
+            top: 8,
+            color: (theme) => theme.palette.grey[500],
+          }}
+        >
+          <CloseIcon />
         </IconButton>
-      </Box>
+      </DialogTitle>
       
-      <Collapse in={expanded}>
+      <DialogContent dividers>
         <form onSubmit={handleSubmit}>
-          <Grid container spacing={2}>
-            {/* URL and Analyze Button */}
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+          {/* URL Analysis Section */}
+          <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={8}>
                 <TextField
                   fullWidth
                   label="Job Posting URL"
                   name="url"
                   value={formData.url}
                   onChange={handleChange}
+                  placeholder="Paste the job posting URL here"
                   variant="outlined"
-                  placeholder="https://example.com/job-posting"
+                  disabled={analyzing}
                 />
+              </Grid>
+              <Grid item xs={12} md={4}>
                 <Button
                   variant="contained"
-                  color="secondary"
-                  startIcon={analyzing ? <CircularProgress size={20} color="inherit" /> : <AnalyticsIcon />}
+                  color="primary"
                   onClick={analyzeJobUrl}
+                  startIcon={<AnalyticsIcon />}
                   disabled={analyzing || !formData.url}
-                  sx={{ height: '56px', whiteSpace: 'nowrap' }}
+                  fullWidth
                 >
                   {analyzing ? 'Analyzing...' : 'Analyze URL'}
                 </Button>
-              </Box>
+              </Grid>
+              {analyzing && (
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                    <CircularProgress size={24} sx={{ mr: 1 }} />
+                    <Typography variant="body2">Analyzing job posting...</Typography>
+                  </Box>
+                </Grid>
+              )}
               {analysisError && (
-                <Alert severity="error" sx={{ mt: 1 }}>
-                  {analysisError}
-                </Alert>
+                <Grid item xs={12}>
+                  <Alert severity="error" sx={{ mt: 1 }}>{analysisError}</Alert>
+                </Grid>
               )}
             </Grid>
-            
-            {/* Company and Role */}
-            <Grid item xs={12} sm={6}>
+          </Paper>
+
+          {/* Basic Information */}
+          <Typography variant="h6" gutterBottom>Basic Information</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
+                required
                 label="Company"
                 name="company"
                 value={formData.company}
                 onChange={handleChange}
-                required
+                margin="normal"
                 variant="outlined"
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
+                required
                 label="Role"
                 name="role"
                 value={formData.role}
                 onChange={handleChange}
-                required
+                margin="normal"
                 variant="outlined"
               />
             </Grid>
-            
-            {/* Salary Fields */}
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="Salary Amount"
-                name="salary_amount"
-                type="number"
-                value={formData.salary_amount}
-                onChange={handleChange}
-                variant="outlined"
-                InputProps={{ inputProps: { min: 0 } }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <FormControl fullWidth variant="outlined">
-                <InputLabel>Currency</InputLabel>
-                <Select
-                  label="Currency"
-                  name="salary_currency"
-                  value={formData.salary_currency}
-                  onChange={handleChange}
-                >
-                  {currencies.map(currency => (
-                    <MenuItem key={currency} value={currency}>{currency}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <FormControl fullWidth variant="outlined">
-                <InputLabel>Salary Type</InputLabel>
-                <Select
-                  label="Salary Type"
-                  name="salary_type"
-                  value={formData.salary_type}
-                  onChange={handleChange}
-                >
-                  {salaryTypes.map(type => (
-                    <MenuItem key={type} value={type}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1, mb: 2 }}>
-                <Button 
-                  variant="outlined" 
-                  color="primary" 
-                  onClick={calculateSalary}
-                  disabled={!formData.salary_amount}
-                >
-                  Calculate Equivalent Salaries
-                </Button>
-              </Box>
-              
-              {showSalaryResults && salaryResults && (
-                <TableContainer component={Paper} sx={{ mt: 2, mb: 3 }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Period</TableCell>
-                        {currencies.map(currency => (
-                          <TableCell key={currency} align="right">{currency}</TableCell>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell component="th" scope="row">Yearly</TableCell>
-                        {currencies.map(currency => (
-                          <TableCell key={currency} align="right">
-                            {formatCurrency(salaryResults.yearly[currency], currency)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                      <TableRow>
-                        <TableCell component="th" scope="row">Monthly</TableCell>
-                        {currencies.map(currency => (
-                          <TableCell key={currency} align="right">
-                            {formatCurrency(salaryResults.monthly[currency], currency)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                      <TableRow>
-                        <TableCell component="th" scope="row">Hourly</TableCell>
-                        {currencies.map(currency => (
-                          <TableCell key={currency} align="right">
-                            {new Intl.NumberFormat('en-US', {
-                              style: 'currency',
-                              currency: currency,
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2
-                            }).format(salaryResults.hourly[currency])}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </Grid>
-            
-            {/* Original Salary Text Field (for backward compatibility) */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Salary (Text Format)"
+                label="Salary (as listed)"
                 name="salary"
                 value={formData.salary}
                 onChange={handleChange}
+                margin="normal"
                 variant="outlined"
-                placeholder="e.g., $100,000 per year"
+                placeholder="e.g., $100,000 - $120,000 per year"
               />
             </Grid>
-            
-            {/* Dates */}
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 label="Date Posted"
@@ -411,11 +381,189 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
                 type="date"
                 value={formData.date_posted}
                 onChange={handleChange}
+                margin="normal"
                 variant="outlined"
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+          </Grid>
+
+          {/* Salary Calculator */}
+          <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Salary Details</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                label="Salary Amount"
+                name="salary_amount"
+                type="number"
+                value={formData.salary_amount}
+                onChange={handleChange}
+                margin="normal"
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth margin="normal" variant="outlined">
+                <InputLabel id="currency-label">Currency</InputLabel>
+                <Select
+                  labelId="currency-label"
+                  name="salary_currency"
+                  value={formData.salary_currency}
+                  onChange={handleChange}
+                  label="Currency"
+                >
+                  {currencies.map((currency) => (
+                    <MenuItem key={currency} value={currency}>
+                      {currency}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth margin="normal" variant="outlined">
+                <InputLabel id="salary-type-label">Payment Period</InputLabel>
+                <Select
+                  labelId="salary-type-label"
+                  name="salary_type"
+                  value={formData.salary_type}
+                  onChange={handleChange}
+                  label="Payment Period"
+                >
+                  {salaryTypes.map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={calculateSalary}
+                disabled={!formData.salary_amount}
+              >
+                Calculate Equivalents
+              </Button>
+            </Grid>
+          </Grid>
+
+          {/* Salary Results */}
+          {showSalaryResults && salaryResults && (
+            <Box sx={{ mt: 2, mb: 2 }}>
+              <Typography variant="subtitle1">Salary Equivalents:</Typography>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Period</TableCell>
+                      <TableCell align="right">PLN</TableCell>
+                      <TableCell align="right">EUR</TableCell>
+                      <TableCell align="right">USD</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell component="th" scope="row">Yearly</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.yearly.pln)} PLN</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.yearly.eur)} EUR</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.yearly.usd)} USD</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell component="th" scope="row">Monthly</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.monthly.pln)} PLN</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.monthly.eur)} EUR</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.monthly.usd)} USD</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell component="th" scope="row">Daily</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.daily.pln)} PLN</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.daily.eur)} EUR</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.daily.usd)} USD</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell component="th" scope="row">Hourly</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.hourly.pln)} PLN</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.hourly.eur)} EUR</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults.hourly.usd)} USD</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          )}
+
+          {/* File Uploads */}
+          <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Documents</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ border: '1px dashed grey', p: 2, borderRadius: 1 }}>
+                <Typography variant="subtitle1" gutterBottom>CV / Resume</Typography>
+                <input
+                  accept=".pdf,.doc,.docx"
+                  style={{ display: 'none' }}
+                  id="cv-file"
+                  type="file"
+                  onChange={(e) => handleFileUpload(e, 'cv')}
+                />
+                <label htmlFor="cv-file">
+                  <Button
+                    variant="outlined"
+                    component="span"
+                    startIcon={<UploadFileIcon />}
+                    disabled={cvUploading}
+                  >
+                    {cvUploading ? 'Uploading...' : 'Upload CV'}
+                  </Button>
+                </label>
+                {cvFileName && (
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Selected file: {cvFileName}
+                  </Typography>
+                )}
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ border: '1px dashed grey', p: 2, borderRadius: 1 }}>
+                <Typography variant="subtitle1" gutterBottom>Cover Letter</Typography>
+                <input
+                  accept=".pdf,.doc,.docx"
+                  style={{ display: 'none' }}
+                  id="cover-letter-file"
+                  type="file"
+                  onChange={(e) => handleFileUpload(e, 'cover_letter')}
+                />
+                <label htmlFor="cover-letter-file">
+                  <Button
+                    variant="outlined"
+                    component="span"
+                    startIcon={<UploadFileIcon />}
+                    disabled={coverLetterUploading}
+                  >
+                    {coverLetterUploading ? 'Uploading...' : 'Upload Cover Letter'}
+                  </Button>
+                </label>
+                {coverLetterFileName && (
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Selected file: {coverLetterFileName}
+                  </Typography>
+                )}
+              </Box>
+            </Grid>
+            {fileUploadError && (
+              <Grid item xs={12}>
+                <Alert severity="error">{fileUploadError}</Alert>
+              </Grid>
+            )}
+          </Grid>
+
+          {/* Additional Information */}
+          <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Additional Information</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 label="Date Applied"
@@ -423,95 +571,29 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
                 type="date"
                 value={formData.date_applied}
                 onChange={handleChange}
+                margin="normal"
                 variant="outlined"
                 InputLabelProps={{ shrink: true }}
-                required
               />
             </Grid>
-            
-            {/* Status */}
-            <Grid item xs={12}>
-              <FormControl fullWidth variant="outlined">
-                <InputLabel>Status</InputLabel>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth margin="normal" variant="outlined">
+                <InputLabel id="status-label">Application Status</InputLabel>
                 <Select
-                  label="Status"
+                  labelId="status-label"
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
+                  label="Application Status"
                 >
-                  {statuses.map(status => (
-                    <MenuItem key={status} value={status}>{status}</MenuItem>
+                  {statuses.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
                   ))}
                 </Select>
               </FormControl>
             </Grid>
-            
-            {/* CV File Upload */}
-            <Grid item xs={12} sm={6}>
-              <Box sx={{ border: '1px dashed #ccc', p: 2, borderRadius: 1 }}>
-                <Typography variant="subtitle2" gutterBottom>CV / Resume</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    component="label"
-                    startIcon={<UploadFileIcon />}
-                    disabled={cvUploading}
-                  >
-                    {cvUploading ? 'Uploading...' : 'Upload CV'}
-                    <input
-                      type="file"
-                      hidden
-                      accept=".pdf,.doc,.docx,.txt,.rtf"
-                      onChange={(e) => handleFileUpload(e, 'cv')}
-                    />
-                  </Button>
-                  {cvFileName && (
-                    <Typography variant="body2" noWrap sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {cvFileName}
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-            </Grid>
-            
-            {/* Cover Letter File Upload */}
-            <Grid item xs={12} sm={6}>
-              <Box sx={{ border: '1px dashed #ccc', p: 2, borderRadius: 1 }}>
-                <Typography variant="subtitle2" gutterBottom>Cover Letter</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    component="label"
-                    startIcon={<UploadFileIcon />}
-                    disabled={coverLetterUploading}
-                  >
-                    {coverLetterUploading ? 'Uploading...' : 'Upload Cover Letter'}
-                    <input
-                      type="file"
-                      hidden
-                      accept=".pdf,.doc,.docx,.txt,.rtf"
-                      onChange={(e) => handleFileUpload(e, 'cover_letter')}
-                    />
-                  </Button>
-                  {coverLetterFileName && (
-                    <Typography variant="body2" noWrap sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {coverLetterFileName}
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-            </Grid>
-
-            {/* File Upload Error */}
-            {fileUploadError && (
-              <Grid item xs={12}>
-                <Alert severity="error">
-                  {fileUploadError}
-                </Alert>
-              </Grid>
-            )}
-            
-            {/* Notes */}
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -519,22 +601,36 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
                 name="notes"
                 value={formData.notes}
                 onChange={handleChange}
+                margin="normal"
                 variant="outlined"
                 multiline
                 rows={4}
+                placeholder="Add any notes or comments about this application"
               />
             </Grid>
-            
-            {/* Submit Button */}
-            <Grid item xs={12}>
-              <Button type="submit" variant="contained" color="primary" fullWidth>
-                {initialData ? 'Update Application' : 'Add Application'}
-              </Button>
-            </Grid>
           </Grid>
+
+          {/* Error Messages */}
+          {submitError && (
+            <Alert severity="error" sx={{ mt: 2 }}>{submitError}</Alert>
+          )}
         </form>
-      </Collapse>
-    </Paper>
+      </DialogContent>
+      
+      <DialogActions>
+        <Button onClick={onClose} color="inherit">
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleSubmit} 
+          color="primary" 
+          variant="contained"
+          disabled={submitting || !formData.company || !formData.role || !formData.url}
+        >
+          {submitting ? 'Submitting...' : 'Add Application'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
