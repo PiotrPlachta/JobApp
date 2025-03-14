@@ -1,28 +1,39 @@
 import os
 import re
+import json
 import requests
+import traceback
 from bs4 import BeautifulSoup
-from openai import OpenAI
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# Get API key and print a masked version for debugging
+api_key = os.getenv('OPENAI_API_KEY')
+masked_key = f"{api_key[:4]}...{api_key[-4:]}" if api_key and len(api_key) > 8 else "Not found"
+print(f"OpenAI API Key (masked): {masked_key}")
+
+# Import and configure OpenAI with v0.28 compatibility
+import openai
+openai.api_key = api_key
 
 def scrape_job_posting(url):
     """
     Scrape content from a job posting URL
     """
+    print(f"\n[DEBUG] Scraping job posting from URL: {url}")
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
+        print("[DEBUG] Sending HTTP request...")
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
+        print(f"[DEBUG] HTTP request successful. Status code: {response.status_code}")
         
         # Parse HTML content
+        print("[DEBUG] Parsing HTML content...")
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # Remove script and style elements
@@ -36,12 +47,17 @@ def scrape_job_posting(url):
         text = re.sub(r'\s+', ' ', text).strip()
         
         # Truncate if too long (context window limitation)
+        original_length = len(text)
         if len(text) > 15000:
             text = text[:15000] + "..."
+            print(f"[DEBUG] Text truncated from {original_length} to 15000 characters")
+        else:
+            print(f"[DEBUG] Extracted text length: {len(text)} characters")
             
         return text
     except Exception as e:
-        print(f"Error scraping job posting: {e}")
+        print(f"[ERROR] Error scraping job posting: {str(e)}")
+        print(traceback.format_exc())
         return None
 
 def analyze_job_posting_with_llm(text):
@@ -49,8 +65,10 @@ def analyze_job_posting_with_llm(text):
     Analyze job posting text using OpenAI API
     """
     if not text:
+        print("[ERROR] No text provided for analysis")
         return None
     
+    print(f"\n[DEBUG] Analyzing job posting text ({len(text)} characters)")
     try:
         prompt = f"""
         You are an expert job application assistant. Analyze the following job posting text and extract the key information.
@@ -74,29 +92,55 @@ def analyze_job_posting_with_llm(text):
         {text}
         """
         
-        response = client.chat.completions.create(
-            model="gpt-4-turbo",  # Use an appropriate model
+        print("[DEBUG] Sending request to OpenAI API...")
+        # Test network connectivity to OpenAI
+        try:
+            conn_test = requests.get("https://api.openai.com/v1", timeout=5)
+            print(f"[DEBUG] Connection test to OpenAI API: Status code {conn_test.status_code}")
+        except Exception as conn_err:
+            print(f"[ERROR] Connection test to OpenAI API failed: {str(conn_err)}")
+        
+        # Use OpenAI v0.28 format with a current model
+        print("[DEBUG] Creating OpenAI ChatCompletion...")
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # Using a current model
             messages=[
                 {"role": "system", "content": "You are a job posting analyzer that extracts structured data from job descriptions."},
                 {"role": "user", "content": prompt}
             ],
-            response_format={"type": "json_object"}
+            temperature=0.3,
+            max_tokens=1000
         )
         
-        # Parse the response
-        result = response.choices[0].message.content
+        print("[DEBUG] OpenAI API request successful")
+        result = response.choices[0].message.content.strip()
+        print(f"[DEBUG] Response length: {len(result)} characters")
+        
+        # Try to parse the result as JSON to validate it
+        try:
+            json_result = json.loads(result)
+            print("[DEBUG] Successfully parsed response as JSON")
+            # Convert back to string for consistent return type
+            result = json.dumps(json_result)
+        except json.JSONDecodeError:
+            print("[WARNING] Response is not valid JSON. Returning raw text.")
+        
         return result
     except Exception as e:
-        print(f"Error analyzing job posting with LLM: {e}")
+        print(f"[ERROR] Error analyzing job posting with LLM: {str(e)}")
+        print(traceback.format_exc())
         return None
 
 def process_job_posting_url(url):
     """
     Process a job posting URL: scrape content and analyze with LLM
     """
+    print(f"\n[DEBUG] Processing job posting URL: {url}")
+    
     # Scrape the job posting
     content = scrape_job_posting(url)
     if not content:
+        print("[ERROR] Failed to scrape job posting content")
         return {
             "error": "Failed to scrape job posting content"
         }
@@ -104,8 +148,10 @@ def process_job_posting_url(url):
     # Analyze with LLM
     analysis = analyze_job_posting_with_llm(content)
     if not analysis:
+        print("[ERROR] Failed to analyze job posting content")
         return {
             "error": "Failed to analyze job posting content"
         }
     
+    print("[DEBUG] Successfully processed job posting URL")
     return analysis
