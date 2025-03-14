@@ -1,4 +1,4 @@
-# JobApp Tracker - Frontend
+# JobApp Tracker - Frontend (v1.0.0)
 
 This is the frontend for the Job Application Tracker application. It's built with React and Material UI to provide a modern, responsive user interface for managing job applications.
 

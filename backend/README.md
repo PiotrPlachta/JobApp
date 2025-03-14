@@ -1,4 +1,4 @@
-# JobApp Tracker - Backend
+# JobApp Tracker - Backend (v1.0.0)
 
 This is the backend for the Job Application Tracker application. It's built with Flask and provides a RESTful API for managing job applications, analyzing job postings, and handling file uploads.
 

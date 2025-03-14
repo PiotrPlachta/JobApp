@@ -1,4 +1,4 @@
-# JobApp - Job Application Tracker
+# JobApp - Job Application Tracker (v1.0.0)
 
 A comprehensive application for streamlining and tracking the job application process. The application uses LLM capabilities to extract information from job postings and manages application details including CV and cover letter files for each application.
 
