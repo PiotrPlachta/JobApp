@@ -4,11 +4,12 @@ import {
   MenuItem, Select, FormControl, InputLabel,
   Table, TableBody, TableCell, TableContainer, 
   TableHead, TableRow, IconButton, Collapse,
-  Box, CircularProgress, Alert
+  Box, CircularProgress, Alert, Input
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import axios from 'axios';
 
 const ApplicationForm = ({ onSubmit, initialData }) => {
@@ -24,6 +25,7 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
     date_posted: '',
     date_applied: new Date().toISOString().split('T')[0],
     cv_path: '',
+    cover_letter_path: '',
     status: 'Applied',
     notes: ''
   });
@@ -40,10 +42,24 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
 
+  // File upload state
+  const [cvUploading, setCvUploading] = useState(false);
+  const [coverLetterUploading, setCoverLetterUploading] = useState(false);
+  const [cvFileName, setCvFileName] = useState('');
+  const [coverLetterFileName, setCoverLetterFileName] = useState('');
+  const [fileUploadError, setFileUploadError] = useState(null);
+
   useEffect(() => {
     // Initialize form with initial data if provided
     if (initialData) {
       setFormData(initialData);
+      // Set file names from paths if available
+      if (initialData.cv_path) {
+        setCvFileName(initialData.cv_path.split('/').pop());
+      }
+      if (initialData.cover_letter_path) {
+        setCoverLetterFileName(initialData.cover_letter_path.split('/').pop());
+      }
     }
 
     // Fetch application statuses
@@ -70,9 +86,13 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
     }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    if (typeof onSubmit === 'function') {
+      onSubmit(formData);
+    } else {
+      console.error('onSubmit is not a function');
+    }
   };
 
   const calculateSalary = async () => {
@@ -139,6 +159,52 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
       setAnalysisError('Failed to analyze URL. Please try again.');
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const handleFileUpload = async (event, fileType) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Set uploading state
+    if (fileType === 'cv') {
+      setCvUploading(true);
+      setCvFileName(file.name);
+    } else {
+      setCoverLetterUploading(true);
+      setCoverLetterFileName(file.name);
+    }
+
+    setFileUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', fileType);
+
+      const response = await axios.post('http://localhost:5000/api/upload-file', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      if (response.data.success) {
+        // Update form data with the file path
+        setFormData(prevData => ({
+          ...prevData,
+          [fileType === 'cv' ? 'cv_path' : 'cover_letter_path']: response.data.path
+        }));
+      }
+    } catch (error) {
+      console.error(`Error uploading ${fileType}:`, error);
+      setFileUploadError(`Failed to upload ${fileType}. Please try again.`);
+    } finally {
+      // Reset uploading state
+      if (fileType === 'cv') {
+        setCvUploading(false);
+      } else {
+        setCoverLetterUploading(false);
+      }
     }
   };
 
@@ -380,18 +446,70 @@ const ApplicationForm = ({ onSubmit, initialData }) => {
               </FormControl>
             </Grid>
             
-            {/* CV Path */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="CV Path"
-                name="cv_path"
-                value={formData.cv_path}
-                onChange={handleChange}
-                variant="outlined"
-                placeholder="Path to CV file used for this application"
-              />
+            {/* CV File Upload */}
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ border: '1px dashed #ccc', p: 2, borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>CV / Resume</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Button
+                    variant="contained"
+                    component="label"
+                    startIcon={<UploadFileIcon />}
+                    disabled={cvUploading}
+                  >
+                    {cvUploading ? 'Uploading...' : 'Upload CV'}
+                    <input
+                      type="file"
+                      hidden
+                      accept=".pdf,.doc,.docx,.txt,.rtf"
+                      onChange={(e) => handleFileUpload(e, 'cv')}
+                    />
+                  </Button>
+                  {cvFileName && (
+                    <Typography variant="body2" noWrap sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {cvFileName}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
             </Grid>
+            
+            {/* Cover Letter File Upload */}
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ border: '1px dashed #ccc', p: 2, borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>Cover Letter</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Button
+                    variant="contained"
+                    component="label"
+                    startIcon={<UploadFileIcon />}
+                    disabled={coverLetterUploading}
+                  >
+                    {coverLetterUploading ? 'Uploading...' : 'Upload Cover Letter'}
+                    <input
+                      type="file"
+                      hidden
+                      accept=".pdf,.doc,.docx,.txt,.rtf"
+                      onChange={(e) => handleFileUpload(e, 'cover_letter')}
+                    />
+                  </Button>
+                  {coverLetterFileName && (
+                    <Typography variant="body2" noWrap sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {coverLetterFileName}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            </Grid>
+
+            {/* File Upload Error */}
+            {fileUploadError && (
+              <Grid item xs={12}>
+                <Alert severity="error">
+                  {fileUploadError}
+                </Alert>
+              </Grid>
+            )}
             
             {/* Notes */}
             <Grid item xs={12}>

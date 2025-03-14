@@ -3,6 +3,7 @@ import sqlite3
 import os
 from datetime import datetime
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -19,6 +20,9 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Drop existing table to recreate with updated schema
+    cursor.execute('DROP TABLE IF EXISTS applications')
+    
     # Create tables if they don't exist
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS applications (
@@ -33,6 +37,7 @@ def init_db():
         date_posted TEXT,
         date_applied TEXT,
         cv_path TEXT,
+        cover_letter_path TEXT,
         status TEXT DEFAULT 'Applied',
         notes TEXT,
         last_updated TEXT
@@ -44,6 +49,16 @@ def init_db():
 
 # Initialize database on startup
 init_db()
+
+# File upload configuration
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt', 'rtf'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/api/applications', methods=['GET'])
 def get_applications():
@@ -73,6 +88,7 @@ def add_application():
     data.setdefault('date_posted', '')
     data.setdefault('date_applied', datetime.now().strftime('%Y-%m-%d'))
     data.setdefault('cv_path', '')
+    data.setdefault('cover_letter_path', '')
     data.setdefault('status', 'Applied')
     data.setdefault('notes', '')
     data.setdefault('last_updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
@@ -80,10 +96,10 @@ def add_application():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
-    INSERT INTO applications (company, role, salary, salary_amount, salary_currency, salary_type, url, date_posted, date_applied, cv_path, status, notes, last_updated)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO applications (company, role, salary, salary_amount, salary_currency, salary_type, url, date_posted, date_applied, cv_path, cover_letter_path, status, notes, last_updated)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (data['company'], data['role'], data['salary'], data['salary_amount'], data['salary_currency'], data['salary_type'], data['url'], 
-          data['date_posted'], data['date_applied'], data['cv_path'], 
+          data['date_posted'], data['date_applied'], data['cv_path'], data['cover_letter_path'], 
           data['status'], data['notes'], data['last_updated']))
     conn.commit()
     
@@ -116,7 +132,7 @@ def update_application(app_id):
         return jsonify({'error': 'Application not found'}), 404
     
     # Update fields
-    fields = ['company', 'role', 'salary', 'salary_amount', 'salary_currency', 'salary_type', 'url', 'date_posted', 'date_applied', 'cv_path', 'status', 'notes']
+    fields = ['company', 'role', 'salary', 'salary_amount', 'salary_currency', 'salary_type', 'url', 'date_posted', 'date_applied', 'cv_path', 'cover_letter_path', 'status', 'notes']
     updates = {field: data.get(field, dict(application)[field]) for field in fields}
     
     # Always update the last_updated timestamp
@@ -125,10 +141,10 @@ def update_application(app_id):
     cursor = conn.cursor()
     cursor.execute('''
     UPDATE applications
-    SET company = ?, role = ?, salary = ?, salary_amount = ?, salary_currency = ?, salary_type = ?, url = ?, date_posted = ?, date_applied = ?, cv_path = ?, status = ?, notes = ?, last_updated = ?
+    SET company = ?, role = ?, salary = ?, salary_amount = ?, salary_currency = ?, salary_type = ?, url = ?, date_posted = ?, date_applied = ?, cv_path = ?, cover_letter_path = ?, status = ?, notes = ?, last_updated = ?
     WHERE id = ?
     ''', (updates['company'], updates['role'], updates['salary'], updates['salary_amount'], updates['salary_currency'], updates['salary_type'], updates['url'],
-          updates['date_posted'], updates['date_applied'], updates['cv_path'], 
+          updates['date_posted'], updates['date_applied'], updates['cv_path'], updates['cover_letter_path'], 
           updates['status'], updates['notes'], updates['last_updated'], app_id))
     conn.commit()
     conn.close()
@@ -347,6 +363,79 @@ def get_stats():
     }
     
     return jsonify(result)
+
+@app.route('/api/test-openai', methods=['GET'])
+def test_openai():
+    try:
+        # Import the OpenAI module
+        import openai
+        
+        # Make a simple API call
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Say hello world!"}
+            ],
+            max_tokens=50
+        )
+        
+        # Return the response
+        return jsonify({
+            'status': 'success',
+            'message': 'OpenAI API call successful',
+            'response': response.choices[0].message.content
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'status': 'error',
+            'message': f'Error calling OpenAI API: {str(e)}',
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/api/upload-file', methods=['POST'])
+def upload_file():
+    # Check if a file was included in the request
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part in the request'}), 400
+    
+    file = request.files['file']
+    file_type = request.form.get('type', 'cv')  # Default to CV if not specified
+    
+    # If user submits an empty form
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # Check if the file type is allowed
+    if file and allowed_file(file.filename):
+        # Secure the filename to prevent directory traversal attacks
+        filename = secure_filename(file.filename)
+        
+        # Create a unique filename with timestamp to prevent overwriting
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        unique_filename = f"{timestamp}_{filename}"
+        
+        # Create subdirectory based on file type
+        subdir = 'cvs' if file_type == 'cv' else 'cover_letters'
+        full_upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], subdir)
+        os.makedirs(full_upload_dir, exist_ok=True)
+        
+        # Save the file
+        file_path = os.path.join(full_upload_dir, unique_filename)
+        file.save(file_path)
+        
+        # Return the relative path to be stored in the database
+        relative_path = os.path.join('uploads', subdir, unique_filename)
+        
+        return jsonify({
+            'success': True,
+            'filename': unique_filename,
+            'path': relative_path,
+            'type': file_type
+        })
+    
+    return jsonify({'error': 'File type not allowed'}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

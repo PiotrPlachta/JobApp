@@ -88,6 +88,8 @@ def analyze_job_posting_with_llm(text):
         For salary_currency, default to "PLN" if not specified.
         For salary_type, default to "yearly" if not specified.
         
+        IMPORTANT: Your response must be valid JSON format only, with no additional text before or after the JSON.
+        
         Job Posting Text:
         {text}
         """
@@ -103,9 +105,9 @@ def analyze_job_posting_with_llm(text):
         # Use OpenAI v0.28 format with a current model
         print("[DEBUG] Creating OpenAI ChatCompletion...")
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Using a current model
+            model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a job posting analyzer that extracts structured data from job descriptions."},
+                {"role": "system", "content": "You are a job posting analyzer that extracts structured data from job descriptions. Always respond with valid JSON only."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -115,15 +117,40 @@ def analyze_job_posting_with_llm(text):
         print("[DEBUG] OpenAI API request successful")
         result = response.choices[0].message.content.strip()
         print(f"[DEBUG] Response length: {len(result)} characters")
+        print(f"[DEBUG] Raw response: {result}")
         
         # Try to parse the result as JSON to validate it
         try:
-            json_result = json.loads(result)
-            print("[DEBUG] Successfully parsed response as JSON")
-            # Convert back to string for consistent return type
-            result = json.dumps(json_result)
-        except json.JSONDecodeError:
-            print("[WARNING] Response is not valid JSON. Returning raw text.")
+            # Try to extract JSON if it's wrapped in markdown code blocks or other text
+            if result.find('{') >= 0 and result.rfind('}') > result.find('{'):
+                potential_json = result[result.find('{'):result.rfind('}')+1]
+                json_result = json.loads(potential_json)
+                print("[DEBUG] Successfully extracted and parsed JSON from response")
+                # Convert back to string for consistent return type
+                result = json.dumps(json_result)
+            else:
+                # Try parsing the whole response as JSON
+                json_result = json.loads(result)
+                print("[DEBUG] Successfully parsed response as JSON")
+                # Convert back to string for consistent return type
+                result = json.dumps(json_result)
+        except json.JSONDecodeError as e:
+            print(f"[WARNING] Response is not valid JSON: {str(e)}. Returning default JSON.")
+            # Create a default JSON response with the raw text included
+            default_json = {
+                "company": "Unknown",
+                "role": "Unknown",
+                "salary": None,
+                "salary_amount": 0,
+                "salary_currency": "PLN",
+                "salary_type": "yearly",
+                "date_posted": None,
+                "skills": [],
+                "experience": None,
+                "location": None,
+                "raw_response": result
+            }
+            result = json.dumps(default_json)
         
         return result
     except Exception as e:

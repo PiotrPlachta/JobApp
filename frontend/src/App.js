@@ -57,7 +57,15 @@ function App() {
       <CssBaseline />
       <Header />
       <Container maxWidth="lg">
-        <ApplicationForm onApplicationAdded={handleApplicationAdded} />
+        <ApplicationForm onSubmit={async (formData) => {
+          try {
+            const response = await axios.post('http://localhost:5000/api/applications', formData);
+            handleApplicationAdded(response.data);
+          } catch (err) {
+            console.error('Error adding application:', err);
+            setError('Failed to add application. Please try again.');
+          }
+        }} />
         
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
