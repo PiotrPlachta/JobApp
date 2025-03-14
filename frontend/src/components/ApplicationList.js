@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Collapse, Box, Typography, IconButton, Button, CircularProgress, Alert, Chip
+  Collapse, Box, Typography, IconButton, Button, CircularProgress, Alert, Chip,
+  TextField, MenuItem, Select, FormControl, InputLabel, Grid, TableSortLabel,
+  Tooltip, OutlinedInput
 } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import ClearIcon from '@mui/icons-material/Clear';
 import axios from 'axios';
 
 const statusColors = {
@@ -99,6 +103,7 @@ const ApplicationRow = ({ application, onDelete, onEdit }) => {
             {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
           </IconButton>
         </TableCell>
+        <TableCell>{application.id}</TableCell>
         <TableCell component="th" scope="row">{application.company}</TableCell>
         <TableCell>{application.role}</TableCell>
         <TableCell>
@@ -124,7 +129,7 @@ const ApplicationRow = ({ application, onDelete, onEdit }) => {
         </TableCell>
       </TableRow>
       <TableRow>
-        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
+        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ margin: 1 }}>
               <Typography variant="h6" gutterBottom component="div">
@@ -203,6 +208,120 @@ const ApplicationRow = ({ application, onDelete, onEdit }) => {
 };
 
 const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAddClick }) => {
+  // State for sorting
+  const [order, setOrder] = useState('desc');
+  const [orderBy, setOrderBy] = useState('date_applied');
+  
+  // State for filtering
+  const [filters, setFilters] = useState({
+    company: '',
+    role: '',
+    status: '',
+    dateFrom: '',
+    dateTo: ''
+  });
+  
+  const [showFilters, setShowFilters] = useState(false);
+  const [statuses, setStatuses] = useState([]);
+  const [filteredApplications, setFilteredApplications] = useState([]);
+
+  // Fetch statuses for filter dropdown
+  useEffect(() => {
+    axios.get('http://localhost:5000/api/application-statuses')
+      .then(response => setStatuses(response.data))
+      .catch(error => console.error('Error fetching statuses:', error));
+  }, []);
+
+  // Apply filters and sorting
+  useEffect(() => {
+    let result = [...applications];
+    
+    // Apply filters
+    if (filters.company) {
+      result = result.filter(app => 
+        app.company.toLowerCase().includes(filters.company.toLowerCase())
+      );
+    }
+    
+    if (filters.role) {
+      result = result.filter(app => 
+        app.role.toLowerCase().includes(filters.role.toLowerCase())
+      );
+    }
+    
+    if (filters.status) {
+      result = result.filter(app => app.status === filters.status);
+    }
+    
+    if (filters.dateFrom) {
+      const fromDate = new Date(filters.dateFrom);
+      result = result.filter(app => {
+        if (!app.date_applied) return false;
+        return new Date(app.date_applied) >= fromDate;
+      });
+    }
+    
+    if (filters.dateTo) {
+      const toDate = new Date(filters.dateTo);
+      toDate.setHours(23, 59, 59, 999); // End of day
+      result = result.filter(app => {
+        if (!app.date_applied) return false;
+        return new Date(app.date_applied) <= toDate;
+      });
+    }
+    
+    // Apply sorting
+    result.sort((a, b) => {
+      let aValue = a[orderBy];
+      let bValue = b[orderBy];
+      
+      // Handle special cases
+      if (orderBy === 'date_applied' || orderBy === 'date_posted') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      } else if (orderBy === 'monthly_salary') {
+        aValue = a.salary_amount ? parseFloat(calculateMonthlySalary(a.salary_amount, a.salary_type)) : 0;
+        bValue = b.salary_amount ? parseFloat(calculateMonthlySalary(b.salary_amount, b.salary_type)) : 0;
+      }
+      
+      if (order === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return bValue < aValue ? -1 : bValue > aValue ? 1 : 0;
+      }
+    });
+    
+    setFilteredApplications(result);
+  }, [applications, filters, order, orderBy]);
+
+  const handleRequestSort = (property) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const handleFilterChange = (event) => {
+    const { name, value } = event.target;
+    setFilters(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      company: '',
+      role: '',
+      status: '',
+      dateFrom: '',
+      dateTo: ''
+    });
+  };
+
+  const createSortHandler = (property) => () => {
+    handleRequestSort(property);
+  };
+
   return (
     <Paper sx={{ width: '100%', overflow: 'hidden', mb: 4 }}>
       {loading ? (
@@ -230,32 +349,171 @@ const ApplicationList = ({ applications, loading, error, onDelete, onEdit, onAdd
         <>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2 }}>
             <Typography variant="h6" component="div">
-              Your Job Applications
+              Your Job Applications ({filteredApplications.length})
             </Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={onAddClick}
-            >
-              Add Application
-            </Button>
+            <Box>
+              <Tooltip title="Toggle Filters">
+                <IconButton onClick={() => setShowFilters(!showFilters)} sx={{ mr: 1 }}>
+                  <FilterListIcon />
+                </IconButton>
+              </Tooltip>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={onAddClick}
+              >
+                Add Application
+              </Button>
+            </Box>
           </Box>
+          
+          {showFilters && (
+            <Box sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={6} md={2}>
+                  <TextField
+                    fullWidth
+                    label="Company"
+                    name="company"
+                    value={filters.company}
+                    onChange={handleFilterChange}
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <TextField
+                    fullWidth
+                    label="Role"
+                    name="role"
+                    value={filters.role}
+                    onChange={handleFilterChange}
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="status-filter-label">Status</InputLabel>
+                    <Select
+                      labelId="status-filter-label"
+                      name="status"
+                      value={filters.status}
+                      onChange={handleFilterChange}
+                      input={<OutlinedInput label="Status" />}
+                    >
+                      <MenuItem value="">
+                        <em>Any</em>
+                      </MenuItem>
+                      {statuses.map((status) => (
+                        <MenuItem key={status} value={status}>
+                          {status}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <TextField
+                    fullWidth
+                    label="Date From"
+                    name="dateFrom"
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={handleFilterChange}
+                    size="small"
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <TextField
+                    fullWidth
+                    label="Date To"
+                    name="dateTo"
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={handleFilterChange}
+                    size="small"
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    startIcon={<ClearIcon />}
+                    onClick={clearFilters}
+                  >
+                    Clear Filters
+                  </Button>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+          
           <TableContainer sx={{ maxHeight: 440 }}>
             <Table stickyHeader aria-label="collapsible table">
               <TableHead>
                 <TableRow>
                   <TableCell />
-                  <TableCell>Company</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Date Applied</TableCell>
-                  <TableCell>Monthly Salary</TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'id'}
+                      direction={orderBy === 'id' ? order : 'asc'}
+                      onClick={createSortHandler('id')}
+                    >
+                      ID
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'company'}
+                      direction={orderBy === 'company' ? order : 'asc'}
+                      onClick={createSortHandler('company')}
+                    >
+                      Company
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'role'}
+                      direction={orderBy === 'role' ? order : 'asc'}
+                      onClick={createSortHandler('role')}
+                    >
+                      Role
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'status'}
+                      direction={orderBy === 'status' ? order : 'asc'}
+                      onClick={createSortHandler('status')}
+                    >
+                      Status
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'date_applied'}
+                      direction={orderBy === 'date_applied' ? order : 'asc'}
+                      onClick={createSortHandler('date_applied')}
+                    >
+                      Date Applied
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'monthly_salary'}
+                      direction={orderBy === 'monthly_salary' ? order : 'asc'}
+                      onClick={createSortHandler('monthly_salary')}
+                    >
+                      Monthly Salary
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {applications.map((application) => (
+                {filteredApplications.map((application) => (
                   <ApplicationRow 
                     key={application.id} 
                     application={application} 
