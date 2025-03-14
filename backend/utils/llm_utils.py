@@ -76,9 +76,13 @@ def analyze_job_posting_with_llm(text):
         - company: The company name
         - role: The job title/role
         - salary: The full salary text as mentioned in the posting (if available)
-        - salary_amount: The numeric salary amount (if available, otherwise 0)
-        - salary_currency: The currency of the salary (PLN, EUR, USD, GBP, etc.)
-        - salary_type: The type of salary (hourly, monthly, yearly)
+        - salary_amount: The numeric salary amount (if available, otherwise 0). If a range is given, use the average or the lower bound.
+          For hourly rates, just extract the hourly amount (e.g., for "110,00–130,00 zł netto (+ VAT) / godz.", extract 110 or 120).
+          For monthly rates, extract the monthly amount.
+          For yearly rates, extract the yearly amount.
+          ALWAYS convert the amount to a number without currency symbols or thousand separators.
+        - salary_currency: The currency of the salary (PLN, EUR, USD, GBP, etc.). Look for currency symbols (zł, €, $, £) or abbreviations.
+        - salary_type: The type of salary (hourly, monthly, yearly). Look for indicators like "per hour", "per month", "per year", "godz.", etc.
         - date_posted: The date the job was posted (in YYYY-MM-DD format if available)
         - skills: A list of key skills required for the job
         - experience: The required experience level
@@ -107,7 +111,7 @@ def analyze_job_posting_with_llm(text):
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a job posting analyzer that extracts structured data from job descriptions. Always respond with valid JSON only."},
+                {"role": "system", "content": "You are a job posting analyzer that extracts structured data from job descriptions. Always respond with valid JSON only. When extracting salary_amount, always convert to a numeric value without currency symbols or thousand separators."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -126,12 +130,50 @@ def analyze_job_posting_with_llm(text):
                 potential_json = result[result.find('{'):result.rfind('}')+1]
                 json_result = json.loads(potential_json)
                 print("[DEBUG] Successfully extracted and parsed JSON from response")
+                
+                # Post-process the salary_amount to ensure it's a number
+                if 'salary_amount' in json_result:
+                    try:
+                        # Remove any non-numeric characters except decimal point
+                        salary_str = str(json_result['salary_amount'])
+                        # Replace comma with dot for decimal point
+                        salary_str = salary_str.replace(',', '.')
+                        # Extract only digits and decimal point
+                        salary_str = ''.join(c for c in salary_str if c.isdigit() or c == '.')
+                        if salary_str:
+                            json_result['salary_amount'] = float(salary_str)
+                        else:
+                            json_result['salary_amount'] = 0
+                    except (ValueError, TypeError):
+                        json_result['salary_amount'] = 0
+                else:
+                    json_result['salary_amount'] = 0
+                
                 # Convert back to string for consistent return type
                 result = json.dumps(json_result)
             else:
                 # Try parsing the whole response as JSON
                 json_result = json.loads(result)
                 print("[DEBUG] Successfully parsed response as JSON")
+                
+                # Post-process the salary_amount to ensure it's a number
+                if 'salary_amount' in json_result:
+                    try:
+                        # Remove any non-numeric characters except decimal point
+                        salary_str = str(json_result['salary_amount'])
+                        # Replace comma with dot for decimal point
+                        salary_str = salary_str.replace(',', '.')
+                        # Extract only digits and decimal point
+                        salary_str = ''.join(c for c in salary_str if c.isdigit() or c == '.')
+                        if salary_str:
+                            json_result['salary_amount'] = float(salary_str)
+                        else:
+                            json_result['salary_amount'] = 0
+                    except (ValueError, TypeError):
+                        json_result['salary_amount'] = 0
+                else:
+                    json_result['salary_amount'] = 0
+                
                 # Convert back to string for consistent return type
                 result = json.dumps(json_result)
         except json.JSONDecodeError as e:

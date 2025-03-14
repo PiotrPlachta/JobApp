@@ -85,7 +85,16 @@ const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
   useEffect(() => {
     // Initialize form with initial data if provided
     if (initialData) {
-      setFormData(initialData);
+      // Ensure all required fields have default values
+      const formattedData = {
+        ...initialData,
+        salary_amount: initialData.salary_amount || 0,
+        salary_currency: initialData.salary_currency || 'PLN',
+        salary_type: initialData.salary_type || 'yearly'
+      };
+      
+      setFormData(formattedData);
+      
       // Set file names from paths if available
       if (initialData.cv_path) {
         setCvFileName(initialData.cv_path.split('/').pop());
@@ -113,10 +122,27 @@ const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prevData => ({
-      ...prevData,
-      [name]: value
-    }));
+    
+    // Special handling for numeric fields
+    if (name === 'salary_amount') {
+      // Allow only numeric input (including decimals)
+      const numericValue = value === '' ? '' : parseFloat(value);
+      
+      setFormData(prevData => ({
+        ...prevData,
+        [name]: numericValue
+      }));
+    } else {
+      setFormData(prevData => ({
+        ...prevData,
+        [name]: value
+      }));
+    }
+    
+    // Reset salary results when salary inputs change
+    if (['salary_amount', 'salary_currency', 'salary_type'].includes(name)) {
+      setShowSalaryResults(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -144,13 +170,38 @@ const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
   };
 
   const calculateSalary = async () => {
+    // Validate salary amount
+    if (!formData.salary_amount && formData.salary_amount !== 0) {
+      console.error('Salary amount is required');
+      return;
+    }
+
     try {
+      // Ensure salary_amount is a number
+      const amount = parseFloat(formData.salary_amount);
+      
+      if (isNaN(amount)) {
+        console.error('Invalid salary amount');
+        return;
+      }
+
+      // Ensure currency and type have default values if not set
+      const currency = formData.salary_currency || 'PLN';
+      const type = formData.salary_type || 'yearly';
+
+      console.log('Sending salary calculation request:', {
+        amount,
+        currency,
+        type
+      });
+
       const response = await axios.post('http://localhost:5000/api/calculate-yearly-salary', {
-        amount: formData.salary_amount,
-        currency: formData.salary_currency,
-        type: formData.salary_type
+        amount: amount,
+        currency: currency,
+        type: type
       });
       
+      console.log('Salary calculation response:', response.data);
       setSalaryResults(response.data);
       setShowSalaryResults(true);
     } catch (error) {
@@ -160,42 +211,45 @@ const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
 
   const analyzeJobUrl = async () => {
     if (!formData.url) {
-      setAnalysisError('Please enter a URL to analyze');
+      setAnalysisError('Please enter a job posting URL');
       return;
     }
-    
+
     setAnalyzing(true);
     setAnalysisError(null);
-    
+
     try {
       const response = await axios.post('http://localhost:5000/api/analyze-url', {
         url: formData.url
       });
-      
-      // Check if there's an error in the response
-      if (response.data.error) {
-        setAnalysisError(response.data.error);
-      } else if (response.data.error_message) {
-        setAnalysisError(response.data.error_message);
-      } else {
-        // Update form with analysis results
+
+      if (response.data) {
+        // Update form data with analyzed information
+        const analysisData = response.data;
+        
+        // Log the analysis data for debugging
+        console.log('URL analysis response:', analysisData);
+        
+        // Ensure salary_amount is a number
+        const salary_amount = analysisData.salary_amount ? parseFloat(analysisData.salary_amount) : 0;
+        
         setFormData(prevData => ({
           ...prevData,
-          company: response.data.company || prevData.company,
-          role: response.data.role || prevData.role,
-          salary: response.data.salary || prevData.salary,
-          salary_amount: response.data.salary_amount || prevData.salary_amount,
-          salary_currency: response.data.salary_currency || prevData.salary_currency,
-          salary_type: response.data.salary_type || prevData.salary_type,
-          date_posted: response.data.date_posted || prevData.date_posted
+          company: analysisData.company || prevData.company,
+          role: analysisData.role || prevData.role,
+          salary: analysisData.salary || prevData.salary,
+          salary_amount: salary_amount,
+          salary_currency: analysisData.salary_currency || prevData.salary_currency,
+          salary_type: analysisData.salary_type || prevData.salary_type,
+          date_posted: analysisData.date_posted || prevData.date_posted
         }));
-        
+
         // If we have salary information, calculate equivalents
-        if (response.data.salary_amount > 0) {
+        if (salary_amount > 0) {
           const salaryResponse = await axios.post('http://localhost:5000/api/calculate-yearly-salary', {
-            amount: response.data.salary_amount,
-            currency: response.data.salary_currency,
-            type: response.data.salary_type
+            amount: salary_amount,
+            currency: analysisData.salary_currency || 'PLN',
+            type: analysisData.salary_type || 'yearly'
           });
           
           setSalaryResults(salaryResponse.data);
@@ -445,9 +499,15 @@ const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
                 color="primary"
                 onClick={calculateSalary}
                 disabled={!formData.salary_amount}
+                sx={{ mt: 1 }}
               >
                 Calculate Equivalents
               </Button>
+              {formData.salary_amount === 0 && (
+                <Typography variant="caption" color="error" sx={{ ml: 2 }}>
+                  Please enter a salary amount to calculate equivalents
+                </Typography>
+              )}
             </Grid>
           </Grid>
 
@@ -468,27 +528,27 @@ const ApplicationForm = ({ open, onClose, onSubmit, initialData }) => {
                   <TableBody>
                     <TableRow>
                       <TableCell component="th" scope="row">Yearly</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.yearly.pln)} PLN</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.yearly.eur)} EUR</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.yearly.usd)} USD</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.yearly?.PLN)} PLN</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.yearly?.EUR)} EUR</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.yearly?.USD)} USD</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell component="th" scope="row">Monthly</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.monthly.pln)} PLN</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.monthly.eur)} EUR</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.monthly.usd)} USD</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.monthly?.PLN)} PLN</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.monthly?.EUR)} EUR</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.monthly?.USD)} USD</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell component="th" scope="row">Daily</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.daily.pln)} PLN</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.daily.eur)} EUR</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.daily.usd)} USD</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.daily?.PLN)} PLN</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.daily?.EUR)} EUR</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.daily?.USD)} USD</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell component="th" scope="row">Hourly</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.hourly.pln)} PLN</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.hourly.eur)} EUR</TableCell>
-                      <TableCell align="right">{formatNumber(salaryResults.hourly.usd)} USD</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.hourly?.PLN)} PLN</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.hourly?.EUR)} EUR</TableCell>
+                      <TableCell align="right">{formatNumber(salaryResults?.hourly?.USD)} USD</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>

@@ -255,61 +255,82 @@ def analyze_url():
 @app.route('/api/calculate-yearly-salary', methods=['POST'])
 def calculate_yearly_salary():
     data = request.json
+    print(f"\n[DEBUG] Received salary calculation request: {data}")
     
     # Validate required fields
     required_fields = ['amount', 'currency', 'type']
     for field in required_fields:
         if field not in data:
+            print(f"[ERROR] Missing required field: {field}")
             return jsonify({'error': f'Missing required field: {field}'}), 400
     
-    amount = float(data['amount'])
-    currency = data['currency']
-    salary_type = data['type']
-    
-    # Define conversion rates (as of March 2025)
-    conversion_rates = {
-        'PLN': 1.0,
-        'EUR': 4.32,  # 1 EUR = 4.32 PLN
-        'USD': 3.95,  # 1 USD = 3.95 PLN
-        'GBP': 5.10   # 1 GBP = 5.10 PLN
-    }
-    
-    # Convert to PLN
-    amount_in_pln = amount * conversion_rates.get(currency, 1.0)
-    
-    # Convert to yearly based on type
-    if salary_type == 'hourly':
-        # Assuming 40 hours per week, 52 weeks per year
-        yearly_amount = amount_in_pln * 40 * 52
-    elif salary_type == 'monthly':
-        # 12 months per year
-        yearly_amount = amount_in_pln * 12
-    else:  # yearly
-        yearly_amount = amount_in_pln
-    
-    # Calculate in other currencies
-    result = {
-        'yearly': {
-            'PLN': yearly_amount,
-            'EUR': yearly_amount / conversion_rates['EUR'],
-            'USD': yearly_amount / conversion_rates['USD'],
-            'GBP': yearly_amount / conversion_rates['GBP']
-        },
-        'monthly': {
-            'PLN': yearly_amount / 12,
-            'EUR': (yearly_amount / 12) / conversion_rates['EUR'],
-            'USD': (yearly_amount / 12) / conversion_rates['USD'],
-            'GBP': (yearly_amount / 12) / conversion_rates['GBP']
-        },
-        'hourly': {
-            'PLN': yearly_amount / (40 * 52),
-            'EUR': (yearly_amount / (40 * 52)) / conversion_rates['EUR'],
-            'USD': (yearly_amount / (40 * 52)) / conversion_rates['USD'],
-            'GBP': (yearly_amount / (40 * 52)) / conversion_rates['GBP']
+    try:
+        # Ensure amount is a float
+        amount = float(data['amount'])
+        currency = data['currency']
+        salary_type = data['type']
+        
+        print(f"[DEBUG] Processing: amount={amount}, currency={currency}, type={salary_type}")
+        
+        # Define conversion rates (as of March 2025)
+        conversion_rates = {
+            'PLN': 1.0,
+            'EUR': 4.17,  
+            'USD': 3.84,  
+            'GBP': 4.96   
         }
-    }
-    
-    return jsonify(result)
+        
+        # Convert to PLN
+        rate = conversion_rates.get(currency, 1.0)
+        amount_in_pln = amount * rate
+        print(f"[DEBUG] Converted to PLN: {amount} {currency} * {rate} = {amount_in_pln} PLN")
+        
+        # Convert to yearly based on type
+        if salary_type == 'hourly':
+            # Assuming 40 hours per week, 52 weeks per year
+            yearly_amount = amount_in_pln * 40 * 52
+            print(f"[DEBUG] Converted hourly to yearly: {amount_in_pln} * 40 * 52 = {yearly_amount}")
+        elif salary_type == 'monthly':
+            # 12 months per year
+            yearly_amount = amount_in_pln * 12
+            print(f"[DEBUG] Converted monthly to yearly: {amount_in_pln} * 12 = {yearly_amount}")
+        else:  # yearly
+            yearly_amount = amount_in_pln
+            print(f"[DEBUG] Already yearly amount: {yearly_amount}")
+        
+        # Calculate in other currencies
+        result = {
+            'yearly': {
+                'PLN': yearly_amount,
+                'EUR': yearly_amount / conversion_rates['EUR'],
+                'USD': yearly_amount / conversion_rates['USD'],
+                'GBP': yearly_amount / conversion_rates['GBP']
+            },
+            'monthly': {
+                'PLN': yearly_amount / 12,
+                'EUR': (yearly_amount / 12) / conversion_rates['EUR'],
+                'USD': (yearly_amount / 12) / conversion_rates['USD'],
+                'GBP': (yearly_amount / 12) / conversion_rates['GBP']
+            },
+            'daily': {
+                'PLN': yearly_amount / 365,
+                'EUR': (yearly_amount / 365) / conversion_rates['EUR'],
+                'USD': (yearly_amount / 365) / conversion_rates['USD'],
+                'GBP': (yearly_amount / 365) / conversion_rates['GBP']
+            },
+            'hourly': {
+                'PLN': yearly_amount / (40 * 52),
+                'EUR': (yearly_amount / (40 * 52)) / conversion_rates['EUR'],
+                'USD': (yearly_amount / (40 * 52)) / conversion_rates['USD'],
+                'GBP': (yearly_amount / (40 * 52)) / conversion_rates['GBP']
+            }
+        }
+        
+        print(f"[DEBUG] Calculation successful. Result sample: yearly.PLN = {result['yearly']['PLN']}")
+        return jsonify(result)
+    except Exception as e:
+        print(f"[ERROR] Error calculating salary: {str(e)}")
+        return jsonify({'error': f'Error calculating salary: {str(e)}'}), 500
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
